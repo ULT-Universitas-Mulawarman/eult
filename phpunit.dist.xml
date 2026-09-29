@@ -49,6 +49,7 @@
             <file>./tests/unit/PublicPortalViewsTest.php</file>
             <file>./tests/Bugfix/K1SqlInjectionExplorationTest.php</file>
             <file>./tests/Bugfix/K1SqlInjectionPreservationTest.php</file>
+            <file>./tests/Bugfix/KunciTidakValidTidakMenyentuhDataTest.php</file>
             <file>./tests/Bugfix/K2M2IdorExplorationTest.php</file>
             <file>./tests/Bugfix/K2T4M2PreservationTest.php</file>
             <file>./tests/Bugfix/Klaster3PreservationTest.php</file>

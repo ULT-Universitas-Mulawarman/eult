@@ -54,6 +54,11 @@ class Modulgroup extends BaseController
     public function update(string $kunci = ''): string
     {
         $terbuka             = $this->enkripsi->decode($kunci);
+
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci modul group tidak valid.', 'error');
+        }
+
         $data                = $this->getMaster($this->pathPage . 'form');
         $data['scripts']     = [];
         $data['save_url']    = site_url($this->controllerName . '/save') . '/';
@@ -99,6 +104,11 @@ class Modulgroup extends BaseController
     {
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
+
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci modul group tidak valid.', 'error');
+        }
+
         $proses  = $this->grup->hapus('s_user_modul_group_ref', ['susrmdgroupNama' => $terbuka]);
 
         if (! empty($proses)) {

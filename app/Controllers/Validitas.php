@@ -31,7 +31,19 @@ class Validitas extends BaseController
     public function index(string $kunci = ''): string
     {
         $terbuka = $this->enkripsi->decode($kunci);
-        $datas   = $this->tiket->byId(['ticketTrackingId' => $terbuka]);
+
+        // Kunci tak terdecode mengembalikan false; false TIDAK BOLEH
+        // diteruskan ke where() karena CI4 menyusunnya menjadi `kolom = 0`
+        // dan pada kolom varchar MySQL kondisi itu cocok dengan SELURUH
+        // baris — byId() ber-JOIN lalu menarik puluhan ribu baris sampai
+        // kehabisan memori pada rute publik ini.
+        $datas = (is_string($terbuka) && $terbuka !== '')
+            ? $this->tiket->byId(['ticketTrackingId' => $terbuka])
+            : false;
+
+        if ($datas === false) {
+            $this->response->setStatusCode(404);
+        }
 
         return view('pages/validitas/index', [
             'datas'       => $datas,

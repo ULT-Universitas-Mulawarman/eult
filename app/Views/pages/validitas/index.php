@@ -126,6 +126,11 @@ License: You must have a valid license purchased only from themeforest(the above
                                         <div class="card-body py-12">
                                             <div class="row">
                                                 <div class="col-lg-12">                         
+                                                    <?php if ($datas == false): ?>
+                                                        <div class="alert alert-danger" role="alert">
+                                                            Surat tidak ditemukan. Kunci validasi tidak valid atau sudah tidak berlaku.
+                                                        </div>
+                                                    <?php else: ?>
                                                     <table border="0" width="60%">
                                                     <tr>
                                                         <td>NIM/NIP</td>
@@ -172,6 +177,7 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     <hr>
 
                                                     <iframe src="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600"></iframe>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>

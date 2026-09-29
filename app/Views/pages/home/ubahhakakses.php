@@ -34,7 +34,12 @@
 							<select class="form-control m-select2" name="hakakses">
 									<option value=""></option>
 							<?php 
-							foreach($hakakses as $row):
+							// $hakakses bernilai false bila pengguna belum punya
+							// baris di s_user_group_user (mis. akun baru). CI3 hanya
+							// memunculkan warning; CI4 mengangkat warning menjadi
+							// fatal, sehingga halaman ini mati. Kosongkan saja
+							// pilihannya.
+							foreach(($hakakses ?: []) as $row):
 								echo '<option value="'.$row['sgroupNama'].'" >'.$row['sgroupNama'].' - '.$row['sgroupKeterangan'].'</option>';
 							endforeach;
 							?>

@@ -55,6 +55,11 @@ class Hakakses extends BaseController
     public function update(string $kunci = ''): string
     {
         $terbuka            = $this->enkripsi->decode($kunci);
+
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci hak akses tidak valid.', 'error');
+        }
+
         $data               = $this->getMaster($this->pathPage . 'form');
         $data['scripts']    = [];
         $data['r_category'] = $this->akses->tabelRef('db_ult.ref_unit', '', 'unitUrut');
@@ -97,6 +102,11 @@ class Hakakses extends BaseController
     {
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
+
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci hak akses tidak valid.', 'error');
+        }
+
         $proses  = $this->akses->hapus('s_user_group', ['sgroupNama' => $terbuka]);
 
         if (! empty($proses)) {

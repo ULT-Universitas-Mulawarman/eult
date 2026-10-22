@@ -261,7 +261,7 @@ class ModelTicketing extends ModelMaster
     {
         $sub2 = $this->subDisposisiTerakhir();
 
-        $baris = $this->db->table($this->table)
+        $builder = $this->db->table($this->table)
             ->select($this->table . ".*,s_user.*,r_priority.*,r_status.*,a.*,d_rating.*,db_ult.ref_jenis_layanan.*,d_disposisi.*,d_archive.*,
                         runit.unitNama runitNama,
                         ref_layanan.layananId sCatId,
@@ -278,9 +278,25 @@ class ModelTicketing extends ModelMaster
             ->join('s_unit a', 'ticketAssign = a.unitId', 'left')
             ->join('d_rating', 'ticketTrackingId=ratingTicketId', 'left')
             ->join('d_archive', 'archiveTrackingId = ticketTrackingId AND (archiveJenis="TTD" or archiveJenis="OUTPUT")', 'LEFT')
-            ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
-            ->where($kondisi)
-            ->get()->getRowArray();
+            ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left');
+
+        // Kondisi string mentah HANYA untuk caller server-side yang terkontrol.
+        // Kondisi dari input publik/request WAJIB bentuk array (binding prepared).
+        if (is_array($kondisi)) {
+            $builder->where($kondisi);
+        } else {
+            // Pertahanan berlapis: kondisi string mentah HANYA boleh berbentuk
+            // "identifier OPERATOR 'literal'" yang aman (digabung AND/OR + tanda
+            // kurung). Segala bentuk injeksi SQL (tautologi quote-break, UNION,
+            // comment terminator, stacked query, dsb.) ditolak dan mengembalikan false.
+            // Caller dari input publik WAJIB memakai bentuk array binding.
+            if (! eult_is_safe_raw_condition($kondisi)) {
+                return false;
+            }
+            $builder->where($kondisi, null, false);
+        }
+
+        $baris = $builder->get()->getRowArray();
 
         return $baris ?? false;
     }

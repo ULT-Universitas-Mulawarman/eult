@@ -36,7 +36,22 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function ambilSatu(string $tabel, array|string $kondisi): array|false
     {
-        $baris = $this->db->table($tabel)->where($kondisi)->get()->getRowArray();
+        $builder = $this->db->table($tabel);
+
+        if (is_array($kondisi)) {
+            $builder->where($kondisi);
+        } else {
+            // Pertahanan berlapis: kondisi string mentah HANYA boleh berbentuk
+            // "identifier OPERATOR 'literal'" yang aman (digabung AND/OR + tanda
+            // kurung). Segala bentuk injeksi SQL ditolak dan mengembalikan false.
+            // Caller dari input publik WAJIB memakai bentuk array binding.
+            if (! eult_is_safe_raw_condition($kondisi)) {
+                return false;
+            }
+            $builder->where($kondisi, null, false);
+        }
+
+        $baris = $builder->get()->getRowArray();
 
         return $baris ?? false;
     }
@@ -61,7 +76,18 @@ class ModelMaster extends \CodeIgniter\Model
     {
         $builder = $this->db->table($tabel)->selectMax($kolom, $kolom);
         if (! empty($kondisi)) {
-            $builder->where($kondisi);
+            if (is_array($kondisi)) {
+                $builder->where($kondisi);
+            } else {
+                // Pertahanan berlapis: kondisi string mentah HANYA boleh berbentuk
+                // "identifier OPERATOR 'literal'" yang aman (digabung AND/OR + tanda
+                // kurung). Segala bentuk injeksi SQL ditolak dan mengembalikan false.
+                // Caller dari input publik WAJIB memakai bentuk array binding.
+                if (! eult_is_safe_raw_condition($kondisi)) {
+                    return false;
+                }
+                $builder->where($kondisi, null, false);
+            }
         }
 
         $baris = $builder->get()->getRowArray();

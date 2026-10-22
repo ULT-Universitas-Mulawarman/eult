@@ -86,6 +86,12 @@ php_errors.log
 graphify-out/
 
 #-------------------------
+# Local Database Dumps
+#-------------------------
+# Dump SQL lokal untuk dev/test — tidak masuk repo.
+/docs/db_*.sql
+
+#-------------------------
 # Composer
 #-------------------------
 /vendor/

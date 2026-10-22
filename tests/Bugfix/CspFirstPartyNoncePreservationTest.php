@@ -241,6 +241,9 @@ final class CspFirstPartyNoncePreservationTest extends CIUnitTestCase
 
             $pathRelatif = substr($berkas->getPathname(), strlen(self::VIEWS_DIR) + 1);
 
+            // Normalisasi separator path untuk kompatibilitas Windows.
+            $pathRelatif = str_replace('\\', '/', $pathRelatif);
+
             // Template PDF mPDF — tidak pernah dirender ke browser.
             if (str_starts_with($pathRelatif, self::CETAK_PREFIX)) {
                 continue;

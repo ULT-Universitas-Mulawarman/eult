@@ -41,8 +41,8 @@ final class K1SqlInjectionPreservationTest extends CIUnitTestCase
 
     private ModelMaster $master;
 
-    /** Nomor tiket VALID sungguhan, terverifikasi ada di d_ticketing (lihat bugfix.md, task 1 corpus). */
-    private const NOMOR_TIKET_VALID = 'QEHO-HTTV-001';
+    /** Nomor tiket VALID sungguhan, terverifikasi ada di d_ticketing (diambil dari data produksi nyata). */
+    private const NOMOR_TIKET_VALID = 'AABZ-WIQJ-001';
 
     protected function setUp(): void
     {

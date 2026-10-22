@@ -49,3 +49,134 @@ if (! function_exists('eult_auto_increment')) {
         return $id;
     }
 }
+if (! function_exists('eult_is_safe_raw_condition')) {
+    /**
+     * Memvalidasi kondisi WHERE string mentah agar hanya mengandung pola
+     * "identifier OPERATOR 'literal'" yang aman (digabung AND/OR dan tanda
+     * kurung), MENOLAK segala bentuk injeksi SQL (tautologi quote-break,
+     * UNION, comment terminator, stacked query, backslash escape, dsb).
+     *
+     * Dipakai sebagai pertahanan berlapis pada method model yang menerima
+     * kondisi string mentah (ModelTicketing::byId(), ModelMaster::ambilSatu(),
+     * ModelMaster::getByLastId()) — kondisi string HANYA boleh berasal dari
+     * caller server-side yang terkontrol; caller yang menerima input publik
+     * WAJIB memakai bentuk array binding.
+     *
+     * Aturan:
+     *  - Identifier: [A-Za-z_][A-Za-z0-9_.]*
+     *  - Operator: = != <> <= >= < > LIKE IN IS
+     *  - Literal: string single-quoted (escape '' diperbolehkan; backslash
+     *    escape TIDAK diperbolehkan), angka, atau NULL
+     *  - Penggabung: AND / OR, tanda kurung seimbang untuk grouping
+     *  - Diblokir: ;, \\, --, , tanda kutip tak berpasangan, token tak dikenal
+     */
+    function eult_is_safe_raw_condition(string $kondisi): bool
+    {
+        if (str_contains($kondisi, ';') || str_contains($kondisi, '\\')) {
+            return false;
+        }
+        if (str_contains($kondisi, '--') || str_contains($kondisi, '/*') || str_contains($kondisi, '*/')) {
+            return false;
+        }
+
+        $i = 0;
+        $n = strlen($kondisi);
+        $expectOperand = true; // true => expect identifier atau '('
+        $parenDepth    = 0;
+
+        while ($i < $n) {
+            while ($i < $n && ctype_space($kondisi[$i])) {
+                $i++;
+            }
+            if ($i >= $n) {
+                break;
+            }
+
+            $c = $kondisi[$i];
+
+            if ($expectOperand) {
+                if ($c === '(') {
+                    $parenDepth++;
+                    $i++;
+                    continue;
+                }
+
+                if (preg_match('/[A-Za-z_][A-Za-z0-9_.]*/A', $kondisi, $m, 0, $i)) {
+                    $i += strlen($m[0]);
+                    while ($i < $n && ctype_space($kondisi[$i])) {
+                        $i++;
+                    }
+
+                    if (preg_match('/(=|!=|<>|<=|>=|<|>|LIKE|IN|IS)/Ai', $kondisi, $m, 0, $i)) {
+                        $i += strlen($m[0]);
+                        while ($i < $n && ctype_space($kondisi[$i])) {
+                            $i++;
+                        }
+
+                        if ($i < $n && $kondisi[$i] === "'") {
+                            $i++;
+                            $closed = false;
+                            while ($i < $n) {
+                                if ($kondisi[$i] === "'") {
+                                    if ($i + 1 < $n && $kondisi[$i + 1] === "'") {
+                                        $i += 2;
+                                        continue;
+                                    }
+                                    $i++;
+                                    $closed = true;
+                                    break;
+                                }
+                                if ($kondisi[$i] === '\\') {
+                                    return false;
+                                }
+                                $i++;
+                            }
+                            if (! $closed) {
+                                return false;
+                            }
+                            $expectOperand = false;
+                            continue;
+                        }
+
+                        if (preg_match('/\d+(\.\d+)?/A', $kondisi, $m, 0, $i)) {
+                            $i += strlen($m[0]);
+                            $expectOperand = false;
+                            continue;
+                        }
+
+                        if (preg_match('/NULL/Ai', $kondisi, $m, 0, $i)) {
+                            $i += strlen($m[0]);
+                            $expectOperand = false;
+                            continue;
+                        }
+
+                        return false;
+                    }
+
+                    return false;
+                }
+
+                return false;
+            }
+
+            if ($c === ')') {
+                $parenDepth--;
+                if ($parenDepth < 0) {
+                    return false;
+                }
+                $i++;
+                continue;
+            }
+
+            if (preg_match('/(AND|OR)/Ai', $kondisi, $m, 0, $i)) {
+                $i += strlen($m[0]);
+                $expectOperand = true;
+                continue;
+            }
+
+            return false;
+        }
+
+        return ! $expectOperand && $parenDepth === 0;
+    }
+}

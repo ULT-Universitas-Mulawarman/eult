@@ -59,6 +59,239 @@ const KTTicketing = function () {
             emptyStar: '&#x2606;'
         });
     }
+    // Handler form aksi dipakai dua alur: daftar tiket (dipanggil handleEvent)
+    // dan modal aksi halaman detail (dipanggil bindModalForm). Karena itu
+    // ketiganya berada di scope KTTicketing agar bisa dipasang tanpa menunggu
+    // daftar tiket dirender.
+    const handleEventDeliver = (status) => {
+        const btnPreview = $('#btn_preview');
+        const formDeliver = $('#form_surat');
+        const btnSimpan = $('#btn_save');
+        btnPreview.on('click', e => {
+            e.preventDefault();
+            const id = $('#suratTrackingId').val();
+            $('#suratBody').html(tinymce.get('suratBody').getContent());
+            $('#suratFooter').html(tinymce.get('suratFooter').getContent());
+            if(tinymce.get('suratTujuan')!==null)
+                $('#suratTujuan').html(tinymce.get('suratTujuan').getContent());
+            $.ajax({
+                type: 'POST',
+                url: e.currentTarget.href,
+                data: formDeliver.serialize(),
+                success: data => {
+                    window.open(`/ticketing/preview/${id}`, '_blank');
+                }
+            });
+        });
+        formDeliver.validate({
+            rules: {
+                suratJenis: "required",
+                suratBody: "required",
+            },
+            messages: {
+                suratJenis: {
+                    required: "Judul Surat / Keterangan Surat Harus Diisi !"
+                },
+                suratBody: {
+                    required: "Isi Surat Harus Diisi !"
+                }
+            }
+        });
+        // Submit native (mis. Enter) harus diblok agar respons JSON endpoint
+        // tidak ditampilkan browser sebagai halaman; alihkan ke jalur klik
+        // tombol Save agar perilakunya sama.
+        formDeliver.off('submit.eultSave').on('submit.eultSave', e => {
+            e.preventDefault();
+            btnSimpan.trigger('click');
+        });
+        btnSimpan.off('click').on('click', e => {
+            const $this = e.currentTarget;
+            $($this).text('Sedang Menyimpan');
+            KTApp.progress($this);
+            e.preventDefault();
+            $('#suratBody').html(tinymce.get('suratBody').getContent());
+            $('#suratFooter').html(tinymce.get('suratFooter').getContent());
+            if(tinymce.get('suratTujuan')!==null)
+                $('#suratTujuan').html(tinymce.get('suratTujuan').getContent());
+            if (formDeliver.valid()) {
+                $.ajax({
+                    type: formDeliver.attr('method'),
+                    url: formDeliver.attr('action'),
+                    data: formDeliver.serialize(),
+                    success: data => {
+                        const eR = (typeof data === 'string' ? JSON.parse(data) : data);
+                        if (eR.status != 'error') {
+                            swal.fire({
+                                text: eR.message,
+                                type: eR.status
+                            }).then(function () {
+                                if (eR.url) {
+                                    window.location.replace(eR.url);
+                                } else {
+                                    location.reload()
+                                }
+                            });
+                        } else {
+                            swal.fire({
+                                text: eR.message,
+                                type: eR.status
+                            });
+                        }
+                        KTApp.unprogress($this);
+                        $this.text = 'Save';
+                    },
+                    error: () => {
+                        KTApp.unprogress($this);
+                        $($this).text('Save');
+                        eultAjaxGalat();
+                    }
+                });
+            } else {
+                KTApp.unprogress($this);
+                $this.text = 'Save';
+            }
+        });
+    }
+    const handleEventValidate = () => {
+        const form = $('#form_tandatangan');
+        const btnSimpan = $('#btn_save');
+        form.validate({
+            rules: {
+                ticketMessage: "required"
+            }
+        });
+        // Submit native (mis. Enter) harus diblok agar respons JSON endpoint
+        // tidak ditampilkan browser sebagai halaman; alihkan ke jalur klik
+        // tombol Save agar perilakunya sama.
+        form.off('submit.eultSave').on('submit.eultSave', e => {
+            e.preventDefault();
+            btnSimpan.trigger('click');
+        });
+        btnSimpan.off('click').on('click', e => {
+            e.preventDefault();
+            if (form.valid()) {
+                const dataSave = new FormData($(form)[0]);
+                swal.fire({
+                    title: "Apakah Anda Yakin Akan Menandatangani Surat?",
+                    text: "Data Tidak Dapat Dikembalikan!!",
+                    type: "warning",
+                    showCancelButton: !0,
+                    confirmButtonText: "Yes, Validasi!"
+                }).then(function (e) {
+                    e.value &&
+                    $.ajax({
+                        type: form[0].method,
+                        url: form[0].action,
+                        data: dataSave,
+                        cache: false,
+                        contentType: false,
+                        processData: false,
+                        success: data => {
+                            var res = (typeof data === 'string' ? JSON.parse(data) : data);
+                            $('#response').fadeIn('slow').html(res.response);
+                            swal.fire({
+                                title: "Validasi",
+                                text: res.message,
+                                type: res.status
+                            }).then(function () {
+                                if (res.url) {
+                                    window.location.replace(res.url);
+                                } else {
+                                    location.reload()
+                                }
+                            });
+                        }
+                    });
+                });
+            }
+        });
+    }
+    const handleEventAssign = () => {
+        const formAssign = $('#form_assign');
+        const btnSimpan = $('#btn_save');
+        formAssign.validate({
+            rules: {
+                ticketAssign: "required",
+                ticketMessage: "required",
+                ticketPriority: "required"
+            }
+        });
+        // Submit native (mis. Enter) harus diblok agar respons JSON endpoint
+        // tidak ditampilkan browser sebagai halaman; alihkan ke jalur klik
+        // tombol Save agar perilakunya sama.
+        formAssign.off('submit.eultSave').on('submit.eultSave', e => {
+            e.preventDefault();
+            btnSimpan.trigger('click');
+        });
+        btnSimpan.off('click').on('click', e => {
+            const dataSave = new FormData($(formAssign)[0]);
+            const $this = e.currentTarget;
+            e.preventDefault();
+            $($this).text('Sedang Menyimpan');
+            KTApp.progress($this);
+            if (formAssign.valid()) {
+                $.ajax({
+                    type: formAssign[0].method,
+                    url: formAssign[0].action,
+                    data: dataSave,
+                    cache: false,
+                    contentType: false,
+                    processData: false,
+                    success: data => {
+                        $($this).text('Save');
+                        KTApp.unprogress($this);
+                        const res = (typeof data === 'string' ? JSON.parse(data) : data);
+                        if (res.status != 'error') {
+                            swal.fire({
+                                title: "Disposisi",
+                                text: res.message,
+                                type: res.status
+                            }).then(function () {
+                                if (res.url) {
+                                    window.location.replace(res.url);
+                                } else {
+                                    location.reload()
+                                }
+                            });
+                        } else {
+                            swal.fire({
+                                title: "Disposisi",
+                                text: res.message,
+                                type: res.status
+                            });
+                        }
+
+                    },
+                    error: () => {
+                        $($this).text('Save');
+                        KTApp.unprogress($this);
+                        eultAjaxGalat();
+                    }
+                });
+            } else {
+                KTUtil.scrollTo($('.is-invalid')[0]);
+                $($this).text('Save');
+                KTApp.unprogress($this);
+            }
+        });
+    }
+    // Form aksi modal halaman detail (disposisi/surat/tandatangan) dimuat
+    // sebagai fragmen AJAX oleh skrip detail.php; fungsi ini memasang handler
+    // simpan yang sama dengan alur daftar tiket agar Save tidak jatuh ke
+    // submit native.
+    const bindModalForm = () => {
+        if (!document.getElementById('modal-action-content')) {
+            return;
+        }
+        initHandleWidgets();
+        if ($('#form_assign').length) {
+            handleEventAssign();
+        } else if ($('#form_tandatangan').length) {
+            handleEventValidate();
+        } else if ($('#form_surat').length) {
+            handleEventDeliver();
+        }
+    }
     const initHandleShow = () => {
         const handleEventCreate = (status) => {
             // Select2 mengunci tampilan placeholder/opsi saat pertama di-init,
@@ -113,6 +346,12 @@ const KTTicketing = function () {
             }
             const formSimpan = $('#form_ticketing');
             const btnSimpan = $('#btn_save');
+            // Enter pada field teks memicu submit native; endpoint tujuan
+            // mengembalikan JSON yang akan ditampilkan browser mentah.
+            formSimpan.off('submit.eultSave').on('submit.eultSave', e => {
+                e.preventDefault();
+                btnSimpan.trigger('click');
+            });
             const btnCheck = $('#btn_check');
             btnCheck.on('click', e => {
                 const $this = e.currentTarget;
@@ -260,84 +499,6 @@ const KTTicketing = function () {
                     KTUtil.scrollTo($('.is-invalid')[0]);
                     $($this).text('Save');
                     KTApp.unprogress($this);
-                }
-            });
-        }
-        const handleEventDeliver = (status) => {
-            const btnPreview = $('#btn_preview');
-            const formDeliver = $('#form_surat');
-            const btnSimpan = $('#btn_save');
-            btnPreview.on('click', e => {
-                e.preventDefault();
-                const id = $('#suratTrackingId').val();
-                $('#suratBody').html(tinymce.get('suratBody').getContent());
-                $('#suratFooter').html(tinymce.get('suratFooter').getContent());
-                if(tinymce.get('suratTujuan')!==null)
-                    $('#suratTujuan').html(tinymce.get('suratTujuan').getContent());
-                $.ajax({
-                    type: 'POST',
-                    url: e.currentTarget.href,
-                    data: formDeliver.serialize(),
-                    success: data => {
-                        window.open(`/ticketing/preview/${id}`, '_blank');
-                    }
-                });
-            });
-            formDeliver.validate({
-                rules: {
-                    suratJenis: "required",
-                    suratBody: "required",
-                },
-                messages: {
-                    suratJenis: {
-                        required: "Judul Surat / Keterangan Surat Harus Diisi !"
-                    },
-                    suratBody: {
-                        required: "Isi Surat Harus Diisi !"
-                    }
-                }
-            });
-            btnSimpan.off('click').on('click', e => {
-                const $this = e.currentTarget;
-                $($this).text('Sedang Menyimpan');
-                KTApp.progress($this);
-                e.preventDefault();
-                $('#suratBody').html(tinymce.get('suratBody').getContent());
-                $('#suratFooter').html(tinymce.get('suratFooter').getContent());
-                if(tinymce.get('suratTujuan')!==null)
-                    $('#suratTujuan').html(tinymce.get('suratTujuan').getContent());
-                if (formDeliver.valid()) {
-                    $.ajax({
-                        type: formDeliver.attr('method'),
-                        url: formDeliver.attr('action'),
-                        data: formDeliver.serialize(),
-                        success: data => {
-                            const eR = (typeof data === 'string' ? JSON.parse(data) : data);                            
-                            if (eR.status != 'error') {
-                                swal.fire({
-                                    text: eR.message,
-                                    type: eR.status
-                                }).then(function () {
-                                    location.reload()
-                                });;
-                            } else {
-                                swal.fire({
-                                    text: eR.message,
-                                    type: eR.status
-                                });
-                            }
-                            KTApp.unprogress($this);
-                            $this.text = 'Save';
-                        },
-                        error: () => {
-                            KTApp.unprogress($this);
-                            $($this).text('Save');
-                            eultAjaxGalat();
-                        }
-                    });
-                } else {
-                    KTApp.unprogress($this);
-                    $this.text = 'Save';
                 }
             });
         }
@@ -806,107 +967,6 @@ const KTTicketing = function () {
                     })
                 }
             });
-            const handleEventValidate = () => {
-                const form = $('#form_tandatangan');
-                const btnSimpan = $('#btn_save');
-                form.validate({
-                    rules: {
-                        ticketMessage: "required"
-                    }
-                });
-                btnSimpan.off('click').on('click', e => {
-                    if (form.valid()) {
-                        const dataSave = new FormData($(form)[0]);
-                        e.preventDefault();
-                        swal.fire({
-                            title: "Apakah Anda Yakin Akan Menandatangani Surat?",
-                            text: "Data Tidak Dapat Dikembalikan!!",
-                            type: "warning",
-                            showCancelButton: !0,
-                            confirmButtonText: "Yes, Validasi!"
-                        }).then(function (e) {
-                            e.value &&
-                            $.ajax({
-                                type: form[0].method,
-                                url: form[0].action,
-                                data: dataSave,
-                                cache: false,
-                                contentType: false,
-                                processData: false,
-                                success: data => {
-                                    var res = (typeof data === 'string' ? JSON.parse(data) : data);
-                                    $('#response').fadeIn('slow').html(res.response);
-                                    swal.fire({
-                                        title: "Validasi",
-                                        text: res.message,
-                                        type: res.status
-                                    }).then(function () {
-                                        location.reload()
-                                    });
-                                }
-                            });
-                        });
-                    }
-                });
-            }
-            const handleEventAssign = () => {
-                const formAssign = $('#form_assign');
-                const btnSimpan = $('#btn_save');
-                formAssign.validate({
-                    rules: {
-                        ticketAssign: "required",
-                        ticketMessage: "required",
-                        ticketPriority: "required"
-                    }
-                });
-                btnSimpan.off('click').on('click', e => {
-                    const dataSave = new FormData($(formAssign)[0]);
-                    const $this = e.currentTarget;
-                    e.preventDefault();
-                    $($this).text('Sedang Menyimpan');
-                    KTApp.progress($this);
-                    if (formAssign.valid()) {
-                        $.ajax({
-                            type: formAssign[0].method,
-                            url: formAssign[0].action,
-                            data: dataSave,
-                            cache: false,
-                            contentType: false,
-                            processData: false,
-                            success: data => {
-                                $($this).text('Save');
-                                KTApp.unprogress($this);
-                                const res = (typeof data === 'string' ? JSON.parse(data) : data);
-                                if (res.status != 'error') {
-                                    swal.fire({
-                                        title: "Disposisi",
-                                        text: res.message,
-                                        type: res.status
-                                    }).then(function () {
-                                        location.reload()
-                                    });
-                                } else {
-                                    swal.fire({
-                                        title: "Disposisi",
-                                        text: res.message,
-                                        type: res.status
-                                    });
-                                }
-
-                            },
-                            error: () => {
-                                $($this).text('Save');
-                                KTApp.unprogress($this);
-                                eultAjaxGalat();
-                            }
-                        });
-                    } else {
-                        KTUtil.scrollTo($('.is-invalid')[0]);
-                        $($this).text('Save');
-                        KTApp.unprogress($this);
-                    }
-                });
-            }            
         }
         $('#btn-create').on('click', e => {
             e.preventDefault();
@@ -927,6 +987,11 @@ const KTTicketing = function () {
         });
         const btnShow = $('#btn_show');
         const formShow = $('#form_show');
+        // Enter pada form pencarian tidak boleh jatuh ke submit native.
+        formShow.off('submit.eultSave').on('submit.eultSave', e => {
+            e.preventDefault();
+            btnShow.trigger('click');
+        });
         formShow.validate({
             rules: {
                 layanan: 'required',
@@ -1038,7 +1103,8 @@ const KTTicketing = function () {
             initHandleWidgets();
             initHandleShow();
             bindExport();
-        }
+        },
+        bindModalForm: bindModalForm
     };
 }();
 

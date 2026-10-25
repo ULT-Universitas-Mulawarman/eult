@@ -591,7 +591,9 @@ class Ticketing extends BaseController
         if ($proses) {
             $namaUnit = $pekerja !== false ? $pekerja['unitNama'] . '(' . $pekerja['parentUnitNama'] . ')' : '';
             eult_save_history('Tiket Telah Diterima Oleh ' . $this->pengguna['susrProfil'] . ' dan Berkas Persyaratan Telah diserahkan Kepada Back Office Unit ' . $namaUnit, $idLama);
-            eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');
+            // JS memakai url ini untuk kembali ke halaman detail tiket setelah
+            // swal; tanpa url mereka hanya reload halaman.
+            eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success', base_url('ticketing/detail') . '/' . $this->enkripsi->encode($idLama));
         }
 
         eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $this->tiket->pesanGalat('simpan penugasan'), 'error');

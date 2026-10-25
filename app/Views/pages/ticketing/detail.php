@@ -695,6 +695,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 if ($.fn.select2) {
                     $('#modal-action-content .m-select2').select2({ width: '100%' });
                 }
+                // Pasang handler simpan (ticketing.js) sesuai form di modal;
+                // tanpa ini Save jatuh ke submit native dan JSON respons
+                // ditampilkan browser sebagai halaman.
+                if (typeof KTTicketing !== 'undefined' && typeof KTTicketing.bindModalForm === 'function') {
+                    KTTicketing.bindModalForm();
+                }
             },
             error: function (xhr, status, error) {
                 $('#modal-action-content').html(

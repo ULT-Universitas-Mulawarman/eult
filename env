@@ -53,7 +53,15 @@
 # ENCRYPTION
 #--------------------------------------------------------------------
 
+# Kunci framework CI4 (wajib unik per instalasi; generate via `php spark key:generate`).
+# Dipakai sebagai fallback Enkripsi tiket bila EULT_ENCRYPTION_LEGACY_KEY kosong.
 # encryption.key =
+
+# Kunci enkripsi tautan tiket (cektiket/validitas) — WAJIB diisi di production
+# dengan nilai acak kuat (mis. `openssl rand -hex 32`). Prioritas utama;
+# bila kosong, dipakai encryption.key di atas. Tautan lama yang dibuat dengan
+# kunci berbeda menjadi invalid setelah kunci diganti.
+# EULT_ENCRYPTION_LEGACY_KEY =
 
 #--------------------------------------------------------------------
 # SESSION
@@ -69,6 +77,57 @@
 # logger.threshold = 4
 
 #--------------------------------------------------------------------
+# DATABASE — kredensial WAJIB diisi di production (dipakai Config\Database).
+#--------------------------------------------------------------------
+
+# Database utama aplikasi.
+# EULT_DB_HOST = 127.0.0.1
+# EULT_DB_PORT = 3306
+# EULT_DB_NAME = db_eultunmul
+# EULT_DB_USER =
+# EULT_DB_PASS =
+
+# Database referensi layanan (ref_layanan/jenis/unit) — dipakai getLayanan()
+# dan seluruh JOIN lintas DB. User DB harus punya SELECT ke database ini,
+# dan FK d_ticketing/r_berkas_layanan/t_surat harus menunjuk ke sini
+# (bukan ke nama lama `db_ult`).
+# EULT_DBULT_HOST = 127.0.0.1
+# EULT_DBULT_PORT = 3306
+# EULT_DBULT_NAME = db_ultunmul
+# EULT_DBULT_USER =
+# EULT_DBULT_PASS =
+
+#--------------------------------------------------------------------
+# EMAIL SMTP — WAJIB diisi di production (dipakai Config\Email).
+# Tanpa EULT_MAIL_PASS, notifikasi tiket (savetiket/validasi) gagal auth.
+# Untuk Gmail wajib App Password (bukan password login), akun perlu
+# 2-Step Verification aktif. Host TANPA prefix ssl:///tls://.
+#--------------------------------------------------------------------
+
+# EULT_MAIL_HOST = smtp.gmail.com
+# EULT_MAIL_PORT = 465
+# EULT_MAIL_USER = tiketult@unmul.ac.id
+# EULT_MAIL_PASS =
+# EULT_MAIL_FROM = tiketult@unmul.ac.id
+# EULT_MAIL_NAME = EULT UNMUL
+
+#--------------------------------------------------------------------
+# OSM UNMUL — kredensial API verifikasi identitas (dipakai OsmClient).
+# Tanpa ini, cek NIM/NIP gagal dan kategori layanan tidak terbuka.
+#--------------------------------------------------------------------
+
+# EULT_OSM_URL = https://osm.unmul.ac.id
+# EULT_OSM_PLPKKN_USER =
+# EULT_OSM_PLPKKN_PASS =
+# EULT_OSM_PLPKKN_KEY =
+# EULT_OSM_SIMKEU_USER =
+# EULT_OSM_SIMKEU_PASS =
+# EULT_OSM_SIMKEU_KEY =
+# EULT_OSM_BAHASA_USER =
+# EULT_OSM_BAHASA_PASS =
+# EULT_OSM_BAHASA_KEY =
+
+#--------------------------------------------------------------------
 # DATA BISNIS EULT (opsional — nilai bawaan ada di kode)
 #--------------------------------------------------------------------
 
@@ -80,3 +139,17 @@
 # Daftar ID layanan khusus untuk pemohon internal (ModelMaster::getLayanan),
 # dipisah koma.
 # EULT_LAYANAN_KHUSUS = '9,12,32,45,78,88,110,27,28,29,146,150,168'
+
+#--------------------------------------------------------------------
+# CHECKLIST PRODUCTION — pastikan seluruh blok WAJIB di atas terisi
+# di file .env server (file ini hanya template, tidak dibaca aplikasi):
+#  [ ] CI_ENVIRONMENT = production, app.baseURL = URL publik
+#  [ ] encryption.key (unik, via `php spark key:generate`)
+#  [ ] EULT_ENCRYPTION_LEGACY_KEY (opsional bila encryption.key sudah ada;
+#      isi bila ingin kunci tautan tiket terpisah dari kunci framework)
+#  [ ] EULT_DB_* (database utama) + EULT_DBULT_* (database referensi)
+#  [ ] EULT_MAIL_* lengkap termasuk EULT_MAIL_PASS (App Password Gmail)
+#  [ ] EULT_OSM_* (URL + 3 set kredensial: PLPKKN, SIMKEU, BAHASA)
+#  [ ] User DB punya SELECT ke db utama + db referensi; FK menunjuk
+#      ke database referensi yang sama dengan EULT_DBULT_NAME
+#--------------------------------------------------------------------

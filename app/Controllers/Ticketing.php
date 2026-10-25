@@ -937,6 +937,7 @@ class Ticketing extends BaseController
             }
 
             eult_save_history('Layanan telah diselesaikan oleh ' . $this->pengguna['susrProfil'] . '.<br/> Pesan: ' . $pesan, (string) $terbuka);
+            $this->kirimEmailSelesai((string) $terbuka);
         } else {
             $nomorSurat = (string) $this->request->getPost('nomor_surat');
             $gabung     = explode(';', (string) $terbuka);
@@ -964,7 +965,43 @@ class Ticketing extends BaseController
             $terbuka = $idTiket;
         }
 
+        $this->kirimEmailSelesai((string) $terbuka);
+
         eult_message_kirim($this->judul . ' Berhasil Divalidasi dan Tiket telah Selesai', 'success');
+    }
+
+    /**
+     * Kirim email "tiket selesai dilayani" + lampiran OUTPUT/TTD bila ada.
+     * Dipakai lastValidated() dan validasiEktm() — kegagalan email HANYA
+     * dicatat di log (via PengirimEmail), tidak menggagalkan validasi
+     * yang status tiketnya sudah berubah.
+     */
+    private function kirimEmailSelesai(string $idTiket): void
+    {
+        if ($idTiket === '') {
+            return;
+        }
+
+        $datas = $this->tiket->byId(['ticketTrackingId' => $idTiket]);
+
+        if ($datas === false || empty($datas['ticketEmail'])) {
+            log_message('warning', 'EULT email selesai dilewati: tiket {tiket} tidak ada email pemohon', ['tiket' => $idTiket]);
+
+            return;
+        }
+
+        $output = $this->tiket->tabelBuilder('d_archive')
+            ->where('archiveTrackingId', $idTiket)
+            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
+            ->orderBy('archiveId', 'DESC')
+            ->get()->getRowArray() ?? false;
+        $lampiran = $output !== false ? ($output['archiveFile'] ?? false) : false;
+
+        $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $idTiket, $datas, $lampiran);
+
+        if (! $terkirim) {
+            log_message('error', 'EULT email selesai gagal terkirim untuk tiket {tiket} ke {email} (status tiket tetap selesai)', ['tiket' => $idTiket, 'email' => $datas['ticketEmail']]);
+        }
     }
 
     public function validasiEktm(string $kunci = '')
@@ -1063,6 +1100,8 @@ class Ticketing extends BaseController
                           </tr>
                         </table>');
         $mpdf->Output(WRITEPATH . 'uploads/ticketing/' . $namaBerkas . '.pdf', 'F');
+
+        $this->kirimEmailSelesai((string) $terbuka);
 
         eult_message_kirim($this->judul . ' Berhasil Divalidasi dan Tiket telah Selesai', 'success');
     }

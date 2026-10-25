@@ -159,8 +159,8 @@ class Database extends Config
     //    ];
 
     /**
-     * Koneksi kedua ke database referensi layanan (db_ult).
-     * Dipakai ModelMaster::getLayanan() yang join db_ult.ref_layanan/jenis/unit.
+     * Koneksi kedua ke database referensi layanan (ref_layanan/jenis/unit).
+     * Dipakai ModelMaster::getLayanan() yang join ref_layanan/jenis/unit.
      * Kredensial via .env: EULT_DBULT_* (lihat .env).
      *
      * @var array<string, mixed>

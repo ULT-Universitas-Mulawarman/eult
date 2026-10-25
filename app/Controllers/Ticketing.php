@@ -97,7 +97,7 @@ class Ticketing extends BaseController
         $data['tanggal']      = session()->get('tanggal');
         $data['create_url']   = site_url($this->controllerName . '/create');
         $data['user_group']   = $this->pengguna;
-        $data['category']     = $this->tiket->tabelRef('db_ult.ref_unit', '', 'unitUrut');
+        $data['category']     = $this->tiket->tabelRef($this->tiket->refUlt('ref_unit'), '', 'unitUrut');
         $data['status_layanan'] = $this->tiket->tabelRef('r_status');
         $data['show_url']     = site_url($this->controllerName . '/response') . '/';
 
@@ -1133,6 +1133,15 @@ class Ticketing extends BaseController
         $idLama   = (string) $this->request->getPost('ticketIdOld');
         $kodeAcak = $idLama === '' ? eult_generate_kode() : '';
 
+        // Guard FK 1452: tolak kategori basi/tidak valid sebelum INSERT/UPDATE
+        // agar pengguna mendapat pesan ramah, bukan pesan mentah MySQL.
+        $kategoriDipilih = (string) $this->request->getPost('ticketCategories');
+
+        if (! $this->tiket->layananValid($kategoriDipilih)) {
+            log_message('error', 'EULT Ticketing::save ditolak: ticketCategories tidak valid ({kategori})', ['kategori' => $kategoriDipilih]);
+            eult_message_kirim($this->judul . ' Gagal Disimpan, kategori layanan tidak valid atau sudah tidak tersedia. Silakan pilih ulang kategori layanan.', 'error');
+        }
+
         // Alokasi nomor + insert dikunci per kode acak: dua permintaan
         // bersamaan dengan kode sama bisa membaca urutan terakhir yang
         // sama (read-then-write) dan menghasilkan ticketTrackingId ganda.
@@ -1151,7 +1160,7 @@ class Ticketing extends BaseController
             $param     = [
                 'ticketIdentitas'  => (string) $this->request->getPost('ticketIdentitas'),
                 'ticketName'       => (string) $this->request->getPost('ticketName'),
-                'ticketCategories' => (string) $this->request->getPost('ticketCategories'),
+                'ticketCategories' => $kategoriDipilih,
                 'ticketEmail'      => (string) $this->request->getPost('ticketEmail'),
                 'ticketNoHp'       => (string) $this->request->getPost('ticketNoHp'),
                 'ticketSubject'    => (string) $this->request->getPost('ticketSubject'),

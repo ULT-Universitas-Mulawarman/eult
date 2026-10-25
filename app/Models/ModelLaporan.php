@@ -20,6 +20,7 @@ class ModelLaporan extends ModelMaster
     public function getLaporan(array $rentang): array|false
     {
         [$tglAwal, $tglAkhir] = $rentang;
+        $refDb = $this->dbUltName();
 
         $hasil = $this->db->table('d_ticketing')
             ->select("DATE(ticketCreated) ticketCreated, unitNama, unitId,
@@ -28,8 +29,8 @@ class ModelLaporan extends ModelMaster
                 SUM(CASE WHEN ticketStatus IN ('1','2','3','4','6','7') THEN 1 ELSE 0 END) AS PROSES,
                 SUM(CASE WHEN ticketStatus = '5' THEN 1 ELSE 0 END) AS SELESAI,
                 SUM(CASE WHEN ticketStatus THEN 1 ELSE 0 END) AS Jumlah", false)
-            ->join('db_ult.ref_layanan', 'layananId = ticketCategories', 'left')
-            ->join('db_ult.ref_unit', 'layananunitId = unitId', 'left')
+            ->join("{$refDb}.ref_layanan", 'layananId = ticketCategories', 'left')
+            ->join("{$refDb}.ref_unit", 'layananunitId = unitId', 'left')
             ->where('ticketCreated >=', $tglAwal)
             ->where('ticketCreated <=', $tglAkhir)
             ->groupBy('unitId')
@@ -45,11 +46,13 @@ class ModelLaporan extends ModelMaster
      */
     public function getLaporanLayanan(string $tanggalAwal, string $tanggalAkhir, string $grup, string $kategori = ''): array|false
     {
+        $refDb = $this->dbUltName();
+
         $sub = $this->db->table('d_ticketing')
             ->select('*')
-            ->join('db_ult.ref_layanan', 'layananId = ticketCategories', 'left')
-            ->join('db_ult.ref_unit', 'layananunitId = unitId', 'left')
-            ->join('db_ult.ref_jenis_layanan', 'jenislayananId = layananjenisId', 'left')
+            ->join("{$refDb}.ref_layanan", 'layananId = ticketCategories', 'left')
+            ->join("{$refDb}.ref_unit", 'layananunitId = unitId', 'left')
+            ->join("{$refDb}.ref_jenis_layanan", 'jenislayananId = layananjenisId', 'left')
             ->join('s_user_group', 'sgroupCategoryId = unitId', 'left')
             ->where("(ticketCreated BETWEEN '" . $this->db->escapeString($tanggalAwal) . "' AND '" . $this->db->escapeString($tanggalAkhir) . "')", null, false)
             ->groupBy('ticketTrackingId');

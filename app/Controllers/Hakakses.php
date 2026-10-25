@@ -44,7 +44,7 @@ class Hakakses extends BaseController
     {
         $data               = $this->getMaster($this->pathPage . 'form');
         $data['scripts']    = [];
-        $data['r_category'] = $this->akses->tabelRef('db_ult.ref_unit', '', 'unitUrut');
+        $data['r_category'] = $this->akses->tabelRef($this->akses->refUlt('ref_unit'), '', 'unitUrut');
         $data['save_url']   = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Create';
         $data['datas']      = false;
@@ -62,7 +62,7 @@ class Hakakses extends BaseController
 
         $data               = $this->getMaster($this->pathPage . 'form');
         $data['scripts']    = [];
-        $data['r_category'] = $this->akses->tabelRef('db_ult.ref_unit', '', 'unitUrut');
+        $data['r_category'] = $this->akses->tabelRef($this->akses->refUlt('ref_unit'), '', 'unitUrut');
         $data['save_url']   = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Update';
         $data['datas']      = $this->akses->ambilSatu('s_user_group', ['sgroupNama' => $terbuka]);

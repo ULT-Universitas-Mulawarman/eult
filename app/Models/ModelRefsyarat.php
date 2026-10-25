@@ -19,7 +19,7 @@ class ModelRefsyarat extends ModelMaster
     {
         $hasil = $this->db->table($this->table)
             ->select('*')
-            ->join('db_ult.ref_layanan', 'berkasidLayanan = layananId', 'LEFT')
+            ->join($this->refUlt('ref_layanan'), 'berkasidLayanan = layananId', 'LEFT')
             ->get()->getResultArray();
 
         return $hasil === [] ? false : $hasil;
@@ -29,7 +29,7 @@ class ModelRefsyarat extends ModelMaster
     {
         $baris = $this->db->table($this->table)
             ->select('*')
-            ->join('db_ult.ref_layanan', 'berkasidLayanan = layananId', 'LEFT')
+            ->join($this->refUlt('ref_layanan'), 'berkasidLayanan = layananId', 'LEFT')
             ->where($kondisi)
             ->get()->getRowArray();
 

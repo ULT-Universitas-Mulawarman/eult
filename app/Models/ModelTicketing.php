@@ -200,19 +200,20 @@ class ModelTicketing extends ModelMaster
      */
     public function dataById(array|string $kondisi = '', string $status = ''): array|false
     {
-        $sub2 = $this->subDisposisiTerakhir();
+        $sub2  = $this->subDisposisiTerakhir();
+        $refDb = $this->dbUltName();
 
         $builder = $this->db->table($this->table)
-            ->select($this->table . ".*,db_ult.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,
+            ->select($this->table . ".*,{$refDb}.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
                     ref_layanan.layananNama sCatNama,
                     ref_layanan.layananunitId sCatCategoryId,
                     ref_layanan.layananisbottomup sCatDisposisi,
                     CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('s_unit sunit', 'ticketAssign = sunit.unitId', 'left')
@@ -259,10 +260,11 @@ class ModelTicketing extends ModelMaster
 
     public function byId(array|string $kondisi): array|false
     {
-        $sub2 = $this->subDisposisiTerakhir();
+        $sub2  = $this->subDisposisiTerakhir();
+        $refDb = $this->dbUltName();
 
         $builder = $this->db->table($this->table)
-            ->select($this->table . ".*,s_user.*,r_priority.*,r_status.*,a.*,d_rating.*,db_ult.ref_jenis_layanan.*,d_disposisi.*,d_archive.*,
+            ->select($this->table . ".*,s_user.*,r_priority.*,r_status.*,a.*,d_rating.*,{$refDb}.ref_jenis_layanan.*,d_disposisi.*,d_archive.*,
                         runit.unitNama runitNama,
                         ref_layanan.layananId sCatId,
                         ref_layanan.layananNama sCatNama,
@@ -270,9 +272,9 @@ class ModelTicketing extends ModelMaster
                         ref_layanan.layananisbottomup sCatDisposisi,
                         CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
             ->join('s_user', 'ticketAssign = susrNama', 'LEFT')
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('s_unit a', 'ticketAssign = a.unitId', 'left')
@@ -306,8 +308,10 @@ class ModelTicketing extends ModelMaster
      */
     public function disposisiById(array|string $kondisi): array|false
     {
+        $refDb = $this->dbUltName();
+
         $hasil = $this->db->table('d_disposisi')
-            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,d_archive.*,db_ult.ref_jenis_layanan.*,
+            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,d_archive.*,{$refDb}.ref_jenis_layanan.*,
                     d_unit.unitNama dunitNama,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
@@ -316,9 +320,9 @@ class ModelTicketing extends ModelMaster
                     ref_layanan.layananisbottomup sCatDisposisi,
                     CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
             ->join('d_ticketing', 'ticketTrackingId = disposisiTicketId', 'left')
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('r_priority', 'disposisiPriority = priorityId', 'LEFT')
             ->join('r_status', 'disposisiStatus = statusId', 'LEFT')
             ->join('s_unit', 'ticketAssign = s_unit.unitId', 'left')
@@ -337,10 +341,11 @@ class ModelTicketing extends ModelMaster
      */
     public function disposisiAll(array|string $kondisi, string $status = ''): array|false
     {
-        $sub2 = $this->subDisposisiTerakhir();
+        $sub2  = $this->subDisposisiTerakhir();
+        $refDb = $this->dbUltName();
 
         $builder = $this->db->table('d_ticketing')
-            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,db_ult.ref_jenis_layanan.*,
+            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,{$refDb}.ref_jenis_layanan.*,
                     d_unit.unitNama dunitNama,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
@@ -348,9 +353,9 @@ class ModelTicketing extends ModelMaster
                     ref_layanan.layananunitId sCatCategoryId,
                     ref_layanan.layananisbottomup sCatDisposisi,
                     CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('s_unit', 'ticketAssign = s_unit.unitId', 'left')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')

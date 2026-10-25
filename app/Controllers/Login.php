@@ -150,6 +150,23 @@ class Login extends BaseController
             ]);
         }
 
+        // Guard FK 1452: pastikan kategori yang dipilih benar-benar ada di
+        // ref_layanan database referensi aktif. Tanpa ini, nilai basi/tidak
+        // valid lolos validasi `required` lalu gagal di INSERT dengan pesan
+        // mentah "Cannot add or update a child row...".
+        $kategoriDipilih = (string) $this->request->getPost('ticketCategories');
+
+        if (! $this->tiket->layananValid($kategoriDipilih)) {
+            eult_captcha_generate(4);
+            log_message('error', 'EULT savetiket ditolak: ticketCategories tidak valid ({kategori})', ['kategori' => $kategoriDipilih]);
+
+            return $this->response->setJSON([
+                'status'      => 'danger',
+                'message'     => 'Kategori layanan tidak valid atau sudah tidak tersedia. Silakan pilih ulang kategori layanan.',
+                'new_captcha' => $this->urlGambarCaptcha(),
+            ]);
+        }
+
         $nama     = (string) $this->request->getPost('ticketName');
         $email    = (string) $this->request->getPost('ticketEmail');
         $kodeAcak = eult_generate_kode();
@@ -186,7 +203,7 @@ class Login extends BaseController
             $param = [
                 'ticketIdentitas'  => (string) $this->request->getPost('ticketIdentitas'),
                 'ticketName'       => $nama,
-                'ticketCategories' => (string) $this->request->getPost('ticketCategories'),
+                'ticketCategories' => $kategoriDipilih,
                 'ticketEmail'      => $email,
                 'ticketNoHp'       => (string) $this->request->getPost('ticketNoHp'),
                 'ticketSubject'    => (string) $this->request->getPost('ticketSubject'),

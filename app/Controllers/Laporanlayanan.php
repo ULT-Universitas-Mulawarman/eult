@@ -32,7 +32,7 @@ class Laporanlayanan extends BaseController
         $data['scripts']    = [$this->pathJs . 'laporan'];
         $data['tanggal']    = session()->get('tanggal');
         $data['user_group'] = $this->sesiLogin();
-        $data['category']   = $this->laporan->tabelRef('db_ult.ref_unit', '', 'unitUrut');
+        $data['category']   = $this->laporan->tabelRef($this->laporan->refUlt('ref_unit'), '', 'unitUrut');
         $data['show_url']   = site_url($this->controllerName . '/response') . '/';
 
         return view($this->template, $data);

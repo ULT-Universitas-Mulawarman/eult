@@ -47,7 +47,7 @@ class Refsyarat extends BaseController
         $data['save_url']      = site_url($this->controllerName . '/save') . '/';
         $data['status_page']   = 'Create';
         $data['datas']         = false;
-        $data['ref_layanan']   = $this->syarat->tabelRef('db_ult.ref_layanan');
+        $data['ref_layanan']   = $this->syarat->tabelRef($this->syarat->refUlt('ref_layanan'));
 
         return view($this->template, $data);
     }
@@ -60,7 +60,7 @@ class Refsyarat extends BaseController
         $data['save_url']    = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Update';
         $data['datas']       = $this->syarat->byId(['berkasId' => $terbuka]);
-        $data['ref_layanan'] = $this->syarat->tabelRef('db_ult.ref_layanan');
+        $data['ref_layanan'] = $this->syarat->tabelRef($this->syarat->refUlt('ref_layanan'));
 
         return view($this->template, $data);
     }

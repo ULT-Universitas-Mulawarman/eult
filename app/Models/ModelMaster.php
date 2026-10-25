@@ -95,11 +95,69 @@ class ModelMaster extends \CodeIgniter\Model
     }
 
     /**
-     * Koneksi kedua ke db_ult (ref_layanan/jenis/unit).
+     * Koneksi kedua ke database referensi layanan (dulu `db_ult`,
+     * sekarang `db_ultunmul` sesuai EULT_DBULT_NAME di .env).
+     * Nama database JANGAN di-hardcode di query — pakai dbUltName()/refUlt().
      */
     protected function dbUlt(): BaseConnection
     {
         return \Config\Database::connect('dbult');
+    }
+
+    /**
+     * Nama database referensi aktif (mis. `db_ultunmul`).
+     * Dipakai untuk membangun nama tabel fully-qualified lintas database
+     * agar JOIN dari koneksi default tetap menunjuk ke DB yang sama
+     * dengan getLayanan() (koneksi dbult).
+     *
+     * Catatan: user `eult_app` hanya punya hak atas `db_eultunmul` dan
+     * `db_ultunmul` (lihat SHOW GRANTS). Nama lama `db_ult` tidak punya
+     * hak baca sehingga query lintas DB ke `db_ult.*` gagal dengan
+     * 1142 SELECT denied dan insert d_ticketing gagal FK 1452.
+     */
+    public function dbUltName(): string
+    {
+        $nama = $this->dbUlt()->getDatabase();
+
+        return $nama !== '' ? $nama : 'db_ultunmul';
+    }
+
+    /**
+     * Nama tabel referensi fully-qualified, mis. `db_ultunmul.ref_layanan`.
+     * Pakai ini untuk join()/tabelRef()/select() lintas database agar tidak
+     * terjebak nama lama `db_ult` yang menyebabkan 1142 SELECT denied dan
+     * 1452 FK constraint fails.
+     */
+    public function refUlt(string $tabel): string
+    {
+        $tabel = trim($tabel);
+
+        // Hanya izinkan karakter aman untuk nama tabel/alias.
+        if ($tabel === '' || ! preg_match('/^[A-Za-z0-9_\. ]+$/', $tabel)) {
+            return $tabel;
+        }
+
+        return $this->dbUltName() . '.' . $tabel;
+    }
+
+    /**
+     * Cek apakah layananId ada di ref_layanan (DB referensi aktif).
+     * Dipakai sebagai guard sebelum insert/update d_ticketing agar
+     * kegagalan FK 1452 menjadi pesan validasi yang ramah.
+     */
+    public function layananValid(int|string $id): bool
+    {
+        if ((string) $id === '' || ! ctype_digit((string) $id)) {
+            return false;
+        }
+
+        $baris = $this->dbUlt()->table('ref_layanan')
+            ->select('layananId')
+            ->where('layananId', (int) $id)
+            ->limit(1)
+            ->get()->getRowArray();
+
+        return $baris !== null && $baris !== false;
     }
 
     /**
@@ -348,7 +406,8 @@ class ModelMaster extends \CodeIgniter\Model
     }
 
     /**
-     * Daftar layanan aktif dari db_ult (join ref_layanan/jenis/unit).
+     * Daftar layanan aktif dari database referensi (join ref_layanan/jenis/unit).
+     * Koneksi dbult menunjuk ke `db_ultunmul` (lihat .env EULT_DBULT_NAME).
      */
     public function getLayanan(string $khusus = ''): array|false
     {
@@ -380,6 +439,8 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function dataNotif(array|string $kondisi = ''): array|false
     {
+        $refDb = $this->dbUltName();
+
         $sub1 = $this->db->table('d_disposisi')
             ->select('disposisiTicketId mDisp,MAX(disposisiTanggal) mTgl')
             ->groupBy('disposisiTicketId')
@@ -392,7 +453,7 @@ class ModelMaster extends \CodeIgniter\Model
             ->getCompiledSelect();
 
         $builder = $this->db->table('d_ticketing')
-            ->select("d_ticketing.*,db_ult.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,d_archive.*,
+            ->select("d_ticketing.*,{$refDb}.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,d_archive.*,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
                     ref_layanan.layananNama sCatNama,
@@ -402,9 +463,9 @@ class ModelMaster extends \CodeIgniter\Model
                     COUNT(repliesTicketId) as jumlah,
                     CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
             ->join('d_replies', 'ticketTrackingId = repliesTicketId', 'LEFT')
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('d_archive', 'archiveTrackingId = ticketTrackingId', 'LEFT')
@@ -427,6 +488,8 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function disposisiNotif(array|string $kondisi): array|false
     {
+        $refDb = $this->dbUltName();
+
         $sub1 = $this->db->table('d_disposisi')
             ->select('disposisiTicketId mDisp,MAX(disposisiTanggal) mTgl')
             ->groupBy('disposisiTicketId')
@@ -439,7 +502,7 @@ class ModelMaster extends \CodeIgniter\Model
             ->getCompiledSelect();
 
         $hasil = $this->db->table('d_ticketing')
-            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,db_ult.ref_jenis_layanan.*,
+            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,{$refDb}.ref_jenis_layanan.*,
                     d_unit.unitNama dunitNama,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
@@ -450,9 +513,9 @@ class ModelMaster extends \CodeIgniter\Model
                     COUNT(repliesTicketId) as jumlah,
                     CONCAT(ref_jenis_layanan.jenislayananNama,' (',runit.unitNama ,')') categoryNama", false)
             ->join('d_replies', 'ticketTrackingId = repliesTicketId', 'LEFT')
-            ->join('db_ult.ref_layanan', 'ticketCategories = layananId', 'LEFT')
-            ->join('db_ult.ref_jenis_layanan', 'layananjenisId = jenislayananId', 'LEFT')
-            ->join('db_ult.ref_unit runit', 'layananunitId = runit.unitId', 'LEFT')
+            ->join("{$refDb}.ref_layanan", 'ticketCategories = layananId', 'LEFT')
+            ->join("{$refDb}.ref_jenis_layanan", 'layananjenisId = jenislayananId', 'LEFT')
+            ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('s_unit', 'ticketAssign = s_unit.unitId', 'left')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')

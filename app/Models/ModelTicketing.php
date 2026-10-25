@@ -422,6 +422,24 @@ class ModelTicketing extends ModelMaster
     }
 
     /**
+     * Seluruh unit untuk dropdown disposisi ADMIN (tanpa pembatasan
+     * mapping s_user_group_unit). Format disamakan dengan
+     * getUnitByHakakses() agar view disposisi.php tidak perlu diubah.
+     *
+     * @return array<int, array<string, mixed>>|false
+     */
+    public function semuaUnitDisposisi(): array|false
+    {
+        $hasil = $this->db->table('s_unit child')
+            ->select('child.*, parent.unitNama AS parentNama')
+            ->join('s_unit parent', 'LEFT(child.unitKode,2) = parent.unitKode', 'LEFT')
+            ->orderBy('child.unitKode')
+            ->get()->getResultArray();
+
+        return $hasil === [] ? false : $hasil;
+    }
+
+    /**
      * @return array<int, array<string, mixed>>|false
      */
     public function getPejabatTtd(string $id): array|false

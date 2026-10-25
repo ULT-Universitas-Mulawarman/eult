@@ -602,9 +602,12 @@ class Ticketing extends BaseController
         $terbuka   = $this->tiketTerotorisasi($kunci);
         $datas     = $this->tiket->byId(['ticketTrackingId' => $terbuka]);
         $disposisi = $this->tiket->disposisiById(['ticketTrackingId' => $terbuka, 'sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama']]);
-        $unit      = $this->tiket->getUnitByHakakses($this->pengguna['susrSgroupNama']);
-        $sgroup    = $this->tiket->tabelRef('s_user_group_unit', ['sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama'], 'sgroupunitIsHome >' => 0]);
-        $arsip     = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $terbuka, 'archiveJenis' => 'TIKET']);
+        $isAdmin   = ($this->pengguna['susrSgroupNama'] ?? '') === 'ADMIN';
+        // ADMIN bypass pembatasan home unit: selalu bisa disposisi ke
+        // seluruh unit (281 unit), bukan hanya 57 unit mapping.
+        $unit   = $isAdmin ? $this->tiket->semuaUnitDisposisi() : $this->tiket->getUnitByHakakses($this->pengguna['susrSgroupNama']);
+        $sgroup = $this->tiket->tabelRef('s_user_group_unit', ['sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama'], 'sgroupunitIsHome >' => 0]);
+        $arsip  = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $terbuka, 'archiveJenis' => 'TIKET']);
 
         $isDisposisi = $datas !== false ? ($datas['disposisiIsTrue'] ?? false) : false;
         $unitTiket   = $datas !== false ? ($datas['ticketAssign'] ?? false) : false;
@@ -616,7 +619,7 @@ class Ticketing extends BaseController
             }
         }
 
-        $isHome = (($unitTiket !== false && $idHome !== false) ? ((in_array($unitTiket, $idHome) && $isDisposisi != 1) ? true : false) : false);
+        $isHome = $isAdmin ? true : (($unitTiket !== false && $idHome !== false) ? ((in_array($unitTiket, $idHome) && $isDisposisi != 1) ? true : false) : false);
 
         return $this->response->setJSON(['response' => view($this->pathPage . 'disposisi', [
             'scripts'           => [$this->pathJs . 'ticketing'],

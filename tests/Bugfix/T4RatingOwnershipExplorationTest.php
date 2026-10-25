@@ -50,65 +50,22 @@ use Config\Services;
  * "XXXX-XXXX-NNN", predictable/sequential, tidak secret) dapat memicu
  * rating() untuk tiket tersebut TANPA pernah memegang/mendekode kunci
  * terenkripsi apa pun untuk tiket itu. Payload uji karena itu adalah
- * NOMOR TIKET NYATA YANG ADA di database — bukan payload SQLi/traversal.
+ * NOMOR TIKET UJI YANG ADA di database — bukan payload SQLi/traversal.
  *
- * Tiket yang dipakai: QEHO-HTTV-001 (dikonfirmasi ADA di d_ticketing,
- * ticketEmail = rizkyfkemala@gmail.com — dibaca langsung dari database
- * live db_newtiket, bukan diasumsikan/dibuat fixture buatan, karena
- * esensi bug ini adalah tiket NYATA milik ORANG NYATA yang bisa
- * ditebak nomornya oleh pihak yang TIDAK PERNAH menerima link
- * terenkripsi untuk tiket tersebut).
+ * Tiket yang dipakai: tiket uji dummy `ZZT4OWN-0000-00A` yang dibuat di
+ * setUp() dengan ticketEmail berdomain `.invalid`. Tidak ada data produksi
+ * atau alamat email pihak ketiga yang tersentuh test ini. Semantik
+ * counterexample tetap sama: nomor tiket yang ditebak tanpa kunci cocok
+ * dengan tiket yang ada di d_ticketing.
  *
  * ═══════════════════════════════════════════════════════════════════
- * KEPUTUSAN ARSITEKTUR TEST — MENGAPA TEST INI *TIDAK* MEN-DISPATCH
- * REQUEST HTTP SUNGGUHAN (berbeda dari K1SqlInjectionHttpIntegrationTest,
- * meski masalah teknis exit; yang mendasari pola cURL-ke-server-live
- * SAMA PERSIS berlaku di sini — eult_message_kirim() dipanggil ketika
- * $proses truthy, yang HAMPIR PASTI terjadi untuk nomorTiket valid):
+ * KEPUTUSAN ARSITEKTUR TEST — MENGAPA TEST INI TIDAK MEN-DISPATCH HTTP
  * ═══════════════════════════════════════════════════════════════════
  *
- * K1's test AMAN men-dispatch request sungguhan ke server live karena
- * payload SQLi-nya (mengandung karakter `'`) SECARA STRUKTURAL TIDAK
- * PERNAH bisa exact-match `ticketTrackingId` literal apa pun (format
- * asli "XXXX-XXXX-NNN" tidak pernah memuat tanda kutip) — sehingga
- * `$datas` SELALU `false` dan `email->selesai()` TIDAK PERNAH terpicu
- * pada kode yang sudah diperbaiki (array binding). Itu diverifikasi
- * ulang secara struktural oleh test K1 sendiri sebelum diklaim aman.
- *
- * Situasi T4 SEBALIKNYA: esensi bug yang harus dibuktikan adalah bahwa
- * nomor tiket yang DITEBAK/DIKETAHUI (tanpa kunci) COCOK dengan tiket
- * NYATA — sehingga `$datas` HARUS `!== false` agar counterexample
- * bermakna. Ini berarti men-dispatch request sungguhan akan membuat
- * `$this->email->selesai((string) $datas['ticketEmail'], ...)` BENAR-
- * BENAR dipanggil dengan `$datas['ticketEmail'] === 'rizkyfkemala@gmail.com'`
- * — alamat email milik ORANG SUNGGUHAN, bukan alamat uji.
- *
- * Investigasi konektivitas SMTP SEBELUM memutuskan (bukan asumsi):
- * - `.env` (EULT_MAIL_HOST/PORT/USER/PASS) berisi KREDENSIAL GMAIL APP
- *   PASSWORD YANG TERLIHAT NYATA/AKTIF (tiketult@unmul.ac.id,
- *   ssl://smtp.gmail.com:465) — BUKAN placeholder/kosong.
- * - Diverifikasi via `getent hosts smtp.gmail.com` (resolve DNS
- *   BERHASIL, mengembalikan alamat IPv6 nyata Google) DAN
- *   `bash -c 'cat < /dev/null > /dev/tcp/smtp.gmail.com/465'` (TCP
- *   connect port 465 BERHASIL, exit code 0) dari lingkungan test ini
- *   SAAT INI — KEDUANYA BERHASIL. Ini BERTOLAK BELAKANG dengan catatan
- *   sesi sebelumnya yang menyebut kegagalan `getaddrinfo` pada percobaan
- *   SMTP di masa lalu (kemungkinan kondisi jaringan yang sudah berubah,
- *   atau merujuk pada lingkungan/percobaan lain — TIDAK dapat
- *   diverifikasi ulang, dan SAAT INI diverifikasi TIDAK berlaku).
- * - Tidak ditemukan file `.env.testing` maupun override konfigurasi
- *   Email khusus environment testing apa pun (app/Config/Boot/testing.php
- *   hanya mengatur error reporting/debug, TIDAK menyentuh konfigurasi
- *   email) — `Config\Email`/`PengirimEmail` akan memakai KREDENSIAL
- *   PRODUKSI YANG SAMA baik dijalankan dari PHPUnit maupun dari server
- *   live, TIDAK ADA sandbox/safety-net otomatis.
- *
- * KESIMPULAN: konektivitas SMTP ke Gmail BERFUNGSI dari lingkungan ini
- * SAAT INI, dengan kredensial yang tampak aktif. Men-dispatch request
- * HTTP sungguhan ke `cektiket/rating` dengan `nomorTiket=QEHO-HTTV-001`
- * BERISIKO NYATA mengirim email sungguhan ke rizkyfkemala@gmail.com,
- * seseorang yang TIDAK ADA hubungannya dengan pengujian ini. Test ini
- * SENGAJA TIDAK melakukan itu.
+ * Dispatch HTTP ke `cektiket/rating` dengan nomor tiket yang valid akan
+ * memanggil pengiriman email (`email->selesai()`) melalui konfigurasi SMTP
+ * di .env. Test ini menghindarinya: pembuktian dilakukan langsung pada
+ * model dan gerbang kondisi, tanpa pengiriman email sungguhan.
  *
  * PENDEKATAN YANG DIPAKAI (membuktikan KEDUA bagian counterexample
  * TANPA mock/stub apa pun terhadap lapisan email, dan TANPA memicu
@@ -152,9 +109,9 @@ use Config\Services;
  * DIMINTA task 6 — TANPA risiko efek samping nyata ke inbox pihak
  * ketiga, dan TANPA mock/stub yang akan melemahkan validitas bukti.
  *
- * Baris d_rating yang tercipta test ini DIBERSIHKAN di setUp() (sebelum,
+ * Baris d_rating dan d_ticketing uji DIBERSIHKAN di setUp() (sebelum,
  * idempoten) DAN tearDown() (sesudah) — TIDAK ADA data uji tersisa di
- * database live untuk tiket QEHO-HTTV-001.
+ * database, dan tiket uji dibuat ulang setiap test.
  *
  * Requirements: 1.23, 1.24 (bugfix.md)
  */
@@ -163,11 +120,13 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
     use FeatureTestTrait;
 
     /**
-     * Tiket NYATA yang ada di database live — dipakai sebagai "nomor
+     * Tiket UJI dummy (bukan tiket nyata) — dipakai sebagai "nomor
      * tiket yang ditebak/diketahui" oleh penyerang yang TIDAK PERNAH
      * menerima/mendekode kunci terenkripsi untuk tiket ini.
      */
-    private const NOMOR_TIKET_TEBAKAN = 'QEHO-HTTV-001';
+    private const NOMOR_TIKET_TEBAKAN = 'ZZT4OWN-0000-00A';
+
+    private const EMAIL_UJI = 't4own-uji@example.invalid';
 
     private BaseConnection $koneksi;
 
@@ -183,12 +142,19 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
         self::assertSame(
             'db_newtiket',
             $this->koneksi->database,
-            'Test eksplorasi ini WAJIB tersambung ke database nyata db_newtiket agar counterexample (tiket nyata + email nyata) bermakna.'
+            'Test eksplorasi ini WAJIB tersambung ke database MySQL db_newtiket (bukan SQLite) agar counterexample bermakna.'
         );
 
         // Idempoten: bersihkan sisa row uji dari run sebelumnya (bila
         // proses sebelumnya terganggu) SEBELUM test berjalan.
         $this->bersihkanRowUji();
+
+        $this->koneksi->table('d_ticketing')->insert([
+            'ticketTrackingId' => self::NOMOR_TIKET_TEBAKAN,
+            'ticketEmail'      => self::EMAIL_UJI,
+            'ticketName'       => 'Pemilik Uji T4Own',
+            'ticketCreated'    => '2026-09-14 09:00:00',
+        ]);
     }
 
     protected function tearDown(): void
@@ -201,6 +167,7 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
     private function bersihkanRowUji(): void
     {
         $this->koneksi->table('d_rating')->where('ratingTicketId', self::NOMOR_TIKET_TEBAKAN)->delete();
+        $this->koneksi->table('d_ticketing')->where('ticketTrackingId', self::NOMOR_TIKET_TEBAKAN)->delete();
     }
 
     /**
@@ -217,10 +184,10 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
 
         self::assertIsArray(
             $baris,
-            'Prasyarat test: nomor tiket tebakan HARUS benar-benar ada di d_ticketing, agar counterexample "menebak tiket nyata tanpa kunci" bermakna.'
+            'Prasyarat test: nomor tiket tebakan HARUS ada di d_ticketing (fixture uji dibuat di setUp), agar counterexample "menebak tiket tanpa kunci" bermakna.'
         );
         self::assertArrayHasKey('ticketEmail', $baris);
-        self::assertNotSame('', (string) $baris['ticketEmail'], 'Tiket tebakan harus memiliki ticketEmail nyata agar bagian "email akan terpicu ke pemilik tiket" bermakna.');
+        self::assertStringEndsWith('.invalid', (string) $baris['ticketEmail'], 'Fixture harus memakai email .invalid agar tidak ada email nyata yang terkirim.');
     }
 
     /**
@@ -262,8 +229,8 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
      *
      * Ini adalah inti perbaikan T4: sebelum fix, `rating()` membaca
      * nomor tiket langsung dari input sehingga siapa pun yang menebak
-     * nomor tiket nyata dapat menilai tiket tersebut. Test ini mengirim
-     * nomor tiket NYATA (yang benar-benar ada di d_ticketing) pada body
+     * nomor tiket uji dapat menilai tiket tersebut. Test ini mengirim
+     * nomor tiket uji (yang ada di d_ticketing) pada body
      * bersama kunci tidak valid — dan menuntut TIDAK ADA efek apa pun.
      */
     public function testRatingMengabaikanNomorTiketYangDikirimDariBody(): void

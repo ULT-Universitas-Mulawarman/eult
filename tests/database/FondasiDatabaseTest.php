@@ -1,7 +1,6 @@
 <?php
 
 use CodeIgniter\Test\DatabaseTestTrait;
-use Tests\Support\Database\Seeds\ExampleSeeder;
 
 /**
  * Test fondasi database EULT: koneksi default + dbult + tabel inti ada.
@@ -27,7 +26,7 @@ final class FondasiDatabaseTest extends \CodeIgniter\Test\CIUnitTestCase
             $this->assertTrue($db->tableExists($tabel), "Tabel {$tabel} harus ada");
         }
 
-        $this->assertTrue(\Config\Database::connect('dbult')->tableExists('ref_layanan'), 'Tabel ref_layanan harus ada di db_ult');
+        $this->assertTrue(\Config\Database::connect('dbult')->tableExists('ref_layanan'), 'Tabel ref_layanan harus ada di db_ultunmul');
     }
 
     public function testModelMasterMenuDanLayanan(): void

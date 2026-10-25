@@ -24,6 +24,77 @@ class ModelMaster extends \CodeIgniter\Model
     protected bool $allowEmptyInserts = true;
 
     /**
+     * Galat tulis terakhir. Static agar dibagi antar instance ModelMaster
+     * (helper eult_* membuat instance baru pada koneksi yang sama).
+     *
+     * @var array<string, mixed>
+     */
+    protected static array $galatTerakhir = [];
+
+    /**
+     * Catat galat DB sesaat setelah penulisan, SEBELUM transComplete()/rollback
+     * dan query berikutnya (mis. RELEASE_LOCK) yang mereset error() koneksi ke 0.
+     */
+    protected function catatGalat(string $langkah, string $tabel): void
+    {
+        $galat = $this->db->error();
+        $kode  = $galat['code'] ?? 0;
+        $pesan = (string) ($galat['message'] ?? '');
+
+        if ((int) $kode === 0 && $pesan === '') {
+            return;
+        }
+
+        static::$galatTerakhir = [
+            'langkah' => $langkah,
+            'tabel'   => $tabel,
+            'code'    => $kode,
+            'message' => $pesan,
+        ];
+
+        log_message('error', 'EULT {langkah} gagal pada {tabel}: [{code}] {pesan}', [
+            'langkah' => $langkah,
+            'tabel'   => $tabel,
+            'code'    => $kode,
+            'pesan'   => $pesan,
+        ]);
+    }
+
+    /**
+     * Kosongkan galat tersimpan di awal penulisan tingkat atas (bukan transaksi bersarang).
+     */
+    protected function resetGalat(): void
+    {
+        if ($this->db->transDepth === 0) {
+            static::$galatTerakhir = [];
+        }
+    }
+
+    /**
+     * Pesan galat penulisan terakhir berbentuk "kode: pesan". Bila DB tidak
+     * melaporkan apa pun, kembalikan penyebab beserta nama langkah (tidak pernah "0: ").
+     */
+    public function pesanGalat(string $langkah = ''): string
+    {
+        if (static::$galatTerakhir !== []) {
+            return static::$galatTerakhir['code'] . ': ' . static::$galatTerakhir['message'];
+        }
+
+        $galat = $this->db->error();
+        $kode  = $galat['code'] ?? 0;
+        $pesan = (string) ($galat['message'] ?? '');
+
+        if ((int) $kode !== 0 || $pesan !== '') {
+            return $kode . ': ' . $pesan;
+        }
+
+        $pesan = 'penyebab tidak diketahui' . ($langkah !== '' ? ' (langkah: ' . $langkah . ')' : '');
+        log_message('error', 'EULT galat penulisan kosong: {pesan}', ['pesan' => $pesan]);
+
+        return $pesan;
+    }
+
+    /**
      * Koneksi kedua ke db_ult (ref_layanan/jenis/unit).
      */
     protected function dbUlt(): BaseConnection
@@ -118,8 +189,10 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function tambah(string $tabel, array $param): bool
     {
+        $this->resetGalat();
         $this->db->transStart();
         $this->db->table($tabel)->insert($param);
+        $this->catatGalat('insert', $tabel);
         log_message('debug', 'EULT insert {tabel}: {query}', ['tabel' => $tabel, 'query' => $this->db->getLastQuery()]);
         $this->db->transComplete();
 
@@ -131,8 +204,10 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function tambahBatch(string $tabel, array $param): bool
     {
+        $this->resetGalat();
         $this->db->transStart();
         $this->db->table($tabel)->insertBatch($param);
+        $this->catatGalat('insert batch', $tabel);
         $this->db->transComplete();
 
         return $this->db->transStatus();
@@ -143,8 +218,10 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function ganti(string $tabel, array $param): bool
     {
+        $this->resetGalat();
         $this->db->transStart();
         $this->db->table($tabel)->replace($param);
+        $this->catatGalat('replace', $tabel);
         $this->db->transComplete();
 
         return $this->db->transStatus();
@@ -155,8 +232,10 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function ubah(string $tabel, array $param, array|string $kondisi): bool
     {
+        $this->resetGalat();
         $this->db->transStart();
         $this->db->table($tabel)->where($kondisi)->update($param);
+        $this->catatGalat('update', $tabel);
         log_message('debug', 'EULT update {tabel}: {query}', ['tabel' => $tabel, 'query' => $this->db->getLastQuery()]);
         $this->db->transComplete();
 
@@ -168,8 +247,10 @@ class ModelMaster extends \CodeIgniter\Model
      */
     public function ubahBatch(string $tabel, array $param, string $kolomKunci): bool
     {
+        $this->resetGalat();
         $this->db->transStart();
         $this->db->table($tabel)->updateBatch($param, $kolomKunci);
+        $this->catatGalat('update batch', $tabel);
         $this->db->transComplete();
 
         return $this->db->transStatus();
@@ -181,13 +262,16 @@ class ModelMaster extends \CodeIgniter\Model
     public function hapus(string $tabel, array|string $kondisi): bool
     {
         try {
+            $this->resetGalat();
             $this->db->transStart();
             $this->db->table($tabel)->where($kondisi)->delete();
+            $this->catatGalat('hapus', $tabel);
             $this->db->transComplete();
 
             return $this->db->transStatus();
         } catch (\Throwable $e) {
             log_message('error', 'EULT hapus gagal {tabel}: {pesan}', ['tabel' => $tabel, 'pesan' => $e->getMessage()]);
+            static::$galatTerakhir = ['langkah' => 'hapus', 'tabel' => $tabel, 'code' => 0, 'message' => $e->getMessage()];
 
             return false;
         }

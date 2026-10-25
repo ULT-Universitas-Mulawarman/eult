@@ -2,6 +2,7 @@
 
 namespace App\Controllers;
 
+use App\Exceptions\ResponsAwalException;
 use App\Libraries\Enkripsi;
 use App\Libraries\GeneratorQr;
 use App\Libraries\OsmClient;
@@ -407,8 +408,7 @@ class Ticketing extends BaseController
             eult_message_kirim('Surat Berhasil Disimpan', 'success');
         }
 
-        $galat = $this->tiket->dbAktif()->error();
-        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . ($galat['code'] ?? '') . ': ' . ($galat['message'] ?? ''), 'error');
+        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $this->tiket->pesanGalat('simpan surat'), 'error');
     }
 
     public function getPreview(?string $segmen = null)
@@ -594,8 +594,7 @@ class Ticketing extends BaseController
             eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');
         }
 
-        $galat = $this->tiket->dbAktif()->error();
-        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . ($galat['code'] ?? '') . ': ' . ($galat['message'] ?? ''), 'error');
+        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $this->tiket->pesanGalat('simpan penugasan'), 'error');
     }
 
     public function accept(string $kunci = '')
@@ -702,8 +701,7 @@ class Ticketing extends BaseController
             eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');
         }
 
-        $galat = $this->tiket->dbAktif()->error();
-        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . ($galat['code'] ?? '') . ': ' . ($galat['message'] ?? ''), 'error');
+        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $this->tiket->pesanGalat('simpan persetujuan'), 'error');
     }
 
     public function validasi(string $kunci = '')
@@ -1173,6 +1171,12 @@ class Ticketing extends BaseController
                 $param['ticketUpdatedBy'] = $this->pengguna['susrProfil'];
                 $proses                   = $this->tiket->ubah('d_ticketing', $param, ['ticketTrackingId' => $idLama]);
             }
+        } catch (ResponsAwalException $e) {
+            // Respons terjadwal (mis. 403 dari tiketMentahTerotorisasi) harus diteruskan apa adanya.
+            throw $e;
+        } catch (\Throwable $e) {
+            log_message('error', 'EULT Ticketing::save gagal pada langkah {langkah}: {pesan}', ['langkah' => 'simpan tiket', 'pesan' => $e->getMessage()]);
+            eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $e->getMessage(), 'error');
         } finally {
             if ($idLama === '') {
                 $this->tiket->lepasKunciNomorTiket($kodeAcak);
@@ -1206,8 +1210,7 @@ class Ticketing extends BaseController
             eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success', base_url('ticketing/detail') . '/' . $this->enkripsi->encode($idTiket));
         }
 
-        $galat = $this->tiket->dbAktif()->error();
-        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . ($galat['code'] ?? '') . ': ' . ($galat['message'] ?? ''), 'error');
+        eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $this->tiket->pesanGalat('simpan tiket'), 'error');
     }
 
     public function delete(string $kunci = '')

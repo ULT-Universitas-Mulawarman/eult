@@ -160,9 +160,14 @@ class Login extends BaseController
         // Lihat ModelTicketing::kunciNomorTiket().
         $this->tiket->kunciNomorTiket($kodeAcak);
 
+        $langkah    = 'alokasi nomor tiket';
+        $pesanGalat = null;
+        $proses     = false;
+
         try {
             $idTiket   = $this->tiket->nomorTiketBerikutnya($kodeAcak);
             $arsipId   = str_replace('-', '', $idTiket);
+            $langkah   = 'arsip tiket';
             $arsipBaru = eult_auto_increment('d_archive', 'archiveId', $arsipId, ['archiveTrackingId' => $idTiket]);
 
             $konfig = [
@@ -194,7 +199,11 @@ class Login extends BaseController
                 'ticketTrackingId' => $idTiket,
             ];
 
-            $proses = $this->tiket->tambah('d_ticketing', $param);
+            $langkah = 'simpan tiket';
+            $proses  = $this->tiket->tambah('d_ticketing', $param);
+        } catch (\Throwable $e) {
+            $pesanGalat = $e->getMessage();
+            log_message('error', 'EULT savetiket gagal pada langkah {langkah}: {pesan}', ['langkah' => $langkah, 'pesan' => $pesanGalat]);
         } finally {
             $this->tiket->lepasKunciNomorTiket($kodeAcak);
         }
@@ -218,11 +227,14 @@ class Login extends BaseController
             ]);
         }
 
-        $galat = $this->tiket->dbAktif()->error();
+        // Galat DB dibaca dari catatan ModelMaster (bukan error() koneksi) karena
+        // RELEASE_LOCK di finally di atas sudah mereset error() menjadi 0 / kosong.
+        $detail = $pesanGalat ?? $this->tiket->pesanGalat($langkah);
+        log_message('error', 'EULT savetiket gagal ({langkah}): {detail}', ['langkah' => $langkah, 'detail' => $detail]);
 
         return $this->response->setJSON([
             'status'  => 'danger',
-            'message' => 'Permintaan layanan anda gagal disimpan, ' . ($galat['code'] ?? '') . ': ' . ($galat['message'] ?? ''),
+            'message' => 'Permintaan layanan anda gagal disimpan, ' . $detail,
         ]);
     }
 

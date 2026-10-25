@@ -1817,6 +1817,13 @@
 
     <!-- begin:: Main Content Stage -->
     <main class="eult-card-container">
+        <?php $pesanGagal = session()->getFlashdata('error'); ?>
+        <?php if (is_string($pesanGagal) && $pesanGagal !== '') : ?>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close"></button>
+                <?= esc($pesanGagal) ?>
+            </div>
+        <?php endif; ?>
         <!-- begin:: 3 Animated Gateway Cards (Interactive Buttons) -->
         <div class="eult-gateway-cards" id="eult_gateway_cards">
             <div class="row">

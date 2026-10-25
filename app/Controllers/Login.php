@@ -99,6 +99,18 @@ class Login extends BaseController
         if ($datas !== false) {
             $kunci = $this->enkripsi->encode($nomorTiket);
 
+            // encode() mengembalikan false bila kunci enkripsi production
+            // tidak terisi (remediasi K3) — JANGAN kirim redirect_url
+            // buntu "cektiket/index/" yang pasti memantul ke homepage.
+            if ($kunci === false || $kunci === '') {
+                log_message('critical', 'EULT cektiket: encode gagal untuk tiket {tiket} — kunci enkripsi tidak terisi', ['tiket' => $nomorTiket]);
+
+                return $this->response->setJSON([
+                    'status'  => 'danger',
+                    'message' => 'Tiket ditemukan, tetapi tautan lacak tidak dapat dibuat (konfigurasi enkripsi belum lengkap). Hubungi administrator.',
+                ]);
+            }
+
             return $this->response->setJSON([
                 'status'       => 'success',
                 'message'      => 'Nomor tiket ditemukan, mengalihkan halaman...',

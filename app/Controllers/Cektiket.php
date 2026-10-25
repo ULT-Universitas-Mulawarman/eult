@@ -36,13 +36,25 @@ class Cektiket extends BaseController
         $nomorTiket = $this->enkripsi->decode($kunci);
 
         if (empty($nomorTiket)) {
-            return redirect()->to(site_url('login'));
+            // Redirect senyap sebelumnya mustahil dilacak dari log.
+            // Bedakan 3 kasus agar diagnosis tidak menebak-nebak:
+            // kunci kosong (route tanpa token), token rusak/terpotong,
+            // atau HMAC gagal (kunci enkripsi beda environment).
+            if ($kunci === '') {
+                log_message('warning', 'EULT cektiket: kunci kosong (URL tanpa token), redirect ke login');
+            } else {
+                log_message('warning', 'EULT cektiket: decode gagal untuk kunci {panjang} karakter', ['panjang' => strlen($kunci)]);
+            }
+
+            return redirect()->to(site_url('login'))->with('error', 'Tautan lacak tiket tidak valid. Gunakan nomor tiket pada form lacak atau tautan lengkap dari email.');
         }
 
         $datas = $this->tiket->byId(['ticketTrackingId' => $nomorTiket]);
 
         if ($datas === false) {
-            return redirect()->to(site_url('login'));
+            log_message('warning', 'EULT cektiket: tiket {tiket} hasil decode tidak ada di DB {db}', ['tiket' => $nomorTiket, 'db' => $this->tiket->dbAktif()->getDatabase()]);
+
+            return redirect()->to(site_url('login'))->with('error', 'Nomor tiket tidak ditemukan di sistem ini. Pastikan Anda melacak di aplikasi yang sama tempat tiket dibuat.');
         }
 
         $balasan = $this->tiket->getReplies('d_replies', ['repliesTicketId' => $nomorTiket]);

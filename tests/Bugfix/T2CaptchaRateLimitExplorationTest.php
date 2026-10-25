@@ -5,6 +5,8 @@ namespace Tests\Bugfix;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
+use Config\Throttle as ThrottleConfig;
 
 /**
  * Task 13 — Test eksplorasi bug condition T2: "Captcha Kosmetik Tanpa
@@ -198,267 +200,197 @@ final class T2CaptchaRateLimitExplorationTest extends CIUnitTestCase
     }
 
     /**
-     * Property 1 (Bug Condition), bagian (a): nilai captcha SEHARUSNYA
-     * (setelah fix, Requirement 2.x captcha-sebagai-gambar) TIDAK dapat
-     * dibaca langsung dari HTML/DOM sebagai teks polos. Pada kode ASLI,
-     * `eult_captcha_generate()` (app/Helpers/eult_captcha_helper.php)
-     * menghasilkan teks polos yang dirender LANGSUNG ke
-     * `<span class="captcha-display">` oleh `app/Views/layouts/
-     * login.php` tanpa transformasi/rendering gambar apa pun.
-     *
-     * Merender view PRODUKSI sungguhan yang sama persis dipakai
-     * `Login::index()` (bukan grep source .php statis) — memastikan
-     * nilai yang benar-benar mencapai klien, bukan sekadar berpotensi
-     * ada di source, mengikuti rigor
-     * T1CsrfExplorationTest::testFormLoginTidakMengandungPemanggilanCsrfFieldApaPun().
-     *
-     * **EXPECTED OUTCOME pada kode asli: GAGAL** — assertion menuntut
-     * nilai captcha TIDAK muncul sebagai teks polos yang dapat di-parse
-     * langsung dari `<span class="captcha-display">...</span>`, namun
-     * pada kode asli nilai tersebut PERSIS ada di sana sebagai teks.
+     * Kunci cache rate-limit untuk alias rute tertentu, dibangun PERSIS
+     * mengikuti format `App\Filters\ThrottleFilter::before()` memakai IP
+     * yang sama dengan request test.
      */
-    public function testCaptchaTerbacaLangsungDariDomTanpaOcr(): void
+    private function kunciCacheThrottle(string $aliasRute): string
     {
-        $nilaiCaptchaDiketahui = 'ZQ7K';
+        $request = $this->setupRequest('POST', $aliasRute);
+        $ip      = $request->getIPAddress();
 
-        $htmlTerender = view('layouts/login', [
-            'captcha'    => $nilaiCaptchaDiketahui,
-            'r_priority' => [],
-            'datas'      => false,
-        ]);
+        return 'throttle_' . preg_replace('/[^A-Za-z0-9_]/', '_', $aliasRute) . '_' . $ip;
+    }
 
-        $cocok = preg_match('/<span class="captcha-display">([^<]*)<\/span>/', $htmlTerender, $tangkapan);
+    private function bersihkanCacheThrottle(string $aliasRute): void
+    {
+        Services::cache()->delete($this->kunciCacheThrottle($aliasRute));
+    }
 
-        self::assertSame(
-            1,
-            $cocok,
-            'Prasyarat test: HTML hasil render app/Views/layouts/login.php SHALL mengandung elemen <span class="captcha-display">...</span> agar nilai di dalamnya dapat diperiksa.'
+    /**
+     * Menaruh counter throttle tepat PADA ambang limit dalam window yang
+     * masih aktif, sehingga SATU request berikutnya sudah melewati batas
+     * dan SHALL ditolak 429 — tanpa perlu mengirim puluhan request
+     * beruntun (yang pada `login/savetiket` berarti puluhan insert tiket
+     * + pengiriman email sungguhan, dan pada `otentifikasi` berarti
+     * puluhan panggilan API eksternal `osm.unmul.ac.id`).
+     *
+     * Format data cache mengikuti ThrottleFilter: ['count' => int,
+     * 'resetAt' => unix timestamp].
+     */
+    private function isiCacheThrottleSampaiLimit(string $aliasRute): void
+    {
+        $konfig = config(ThrottleConfig::class);
+        $limit  = (int) ($konfig->routes[$aliasRute]['limit'] ?? $konfig->default['limit']);
+
+        Services::cache()->save(
+            $this->kunciCacheThrottle($aliasRute),
+            ['count' => $limit, 'resetAt' => time() + 60],
+            60
         );
+    }
 
-        $nilaiTerbacaDariDom = $tangkapan[1] ?? '';
+    /**
+     * Menambahkan token CSRF (nama+nilai terkini) ke payload POST.
+     * `injectMock('request')` + `resetSingle('security')` diperlukan agar
+     * security service dibangun terhadap IncomingRequest (bukan
+     * CLIRequest) — pola yang sama dipakai T2M3RateLimitHttpIntegrationTest.
+     *
+     * @param array<string, string> $field
+     *
+     * @return array<string, string>
+     */
+    private function denganTokenCsrf(string $aliasRute, array $field): array
+    {
+        Services::injectMock('request', $this->setupRequest('POST', $aliasRute));
+        Services::resetSingle('security');
 
-        // *** ASSERTION UTAMA (Property 1a — Bug Condition) ***
-        // Pada kode SETELAH fix T2 (captcha sebagai gambar PNG, task
-        // 19.1), elemen ini SEHARUSNYA TIDAK berisi teks captcha polos
-        // yang dapat dibaca langsung (nilai captcha akan berada di
-        // dalam data biner gambar, bukan teks HTML). Pada kode ASLI,
-        // nilai yang di-pass ke view MUNCUL VERBATIM sebagai teks di
-        // dalam span tersebut — membuktikan captcha "kosmetik", terbaca
-        // tanpa OCR/effort apa pun.
+        return array_merge($field, [csrf_token() => csrf_hash()]);
+    }
+
+    /**
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix T2:
+     * captcha SHALL berupa GAMBAR, sehingga nilainya TIDAK PERNAH
+     * terbaca sebagai teks pada DOM/HTML halaman login.
+     *
+     * Diuji lewat dispatch SUNGGUHAN `GET /login` (bukan render view
+     * manual dengan data buatan): nilai captcha yang benar-benar
+     * disimpan di session oleh `eult_captcha_generate()` diambil, lalu
+     * dipastikan TIDAK muncul pada HTML yang dikirim ke klien, dan
+     * halaman SHALL merujuk endpoint gambar `login/captcha_image`.
+     */
+    public function testCaptchaTidakTerbacaDariDomKarenaBerupaGambar(): void
+    {
+        $hasil = $this->get('login');
+
+        $hasil->assertStatus(200);
+
+        $htmlTerender = (string) $hasil->getBody();
+
+        $nilaiCaptchaSesi = (string) (session()->get('captcha') ?? '');
+
         self::assertNotSame(
-            $nilaiCaptchaDiketahui,
-            $nilaiTerbacaDariDom,
+            '',
+            $nilaiCaptchaSesi,
+            'Prasyarat test: GET /login SHALL men-generate captcha ke session (eult_captcha_generate()).'
+        );
+
+        self::assertStringNotContainsString(
+            $nilaiCaptchaSesi,
+            $htmlTerender,
             sprintf(
-                "BUG CONDITION T2 (Requirement 1.18) — COUNTEREXAMPLE: nilai captcha '%s' TERBACA VERBATIM sebagai teks polos di dalam <span class=\"captcha-display\">%s</span> pada HTML hasil render app/Views/layouts/login.php — dapat dibaca langsung dari DOM/HTML TANPA OCR atau upaya apa pun. Ini membuktikan captcha bersifat murni kosmetik (bukan gambar), karena eult_captcha_generate() (app/Helpers/eult_captcha_helper.php) menghasilkan teks polos yang dirender langsung tanpa transformasi visual/gambar.",
-                $nilaiCaptchaDiketahui,
-                $nilaiTerbacaDariDom
+                "EXPECTED BEHAVIOR T2 (Requirement 2.27) — nilai captcha session '%s' TIDAK BOLEH muncul sebagai teks polos pada HTML halaman login; captcha disajikan sebagai gambar agar tidak dapat dibaca dari DOM tanpa OCR.",
+                $nilaiCaptchaSesi
             )
+        );
+
+        self::assertStringContainsString(
+            'captcha_image',
+            $htmlTerender,
+            'EXPECTED BEHAVIOR T2 (Requirement 2.27) — halaman login SHALL merujuk endpoint gambar captcha (login/captcha_image).'
         );
     }
 
     /**
-     * Property 1 (Bug Condition), bagian (b) — Otentifikasi: kirim
-     * {self::JUMLAH_REQUEST_BERUNTUN} request POST beruntun ke
-     * `otentifikasi` (route: app/Config/Routes.php ->
-     * `Otentifikasi::index`) dalam interval singkat dari "IP" yang sama
-     * (test dispatch in-process — tidak ada IP nyata bervariasi) pada
-     * kode ASLI → SELURUHNYA harus diproses TANPA sinyal rate-limit
-     * (429 atau respons setara) — membuktikan tidak ada Throttler apa
-     * pun (dikonfirmasi via pencarian `Throttle`/`Throttler` di seluruh
-     * codebase: NOL kecocokan; `app/Config/Filters.php` $aliases juga
-     * TIDAK memiliki entri 'throttle').
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix T2:
+     * `otentifikasi` SHALL dibatasi rate-limit per-IP. Request yang
+     * melewati ambang batas dalam window yang sama SHALL ditolak 429
+     * dengan body JSON `danger` (konsisten dengan kontrak respons
+     * endpoint lain), BUKAN halaman error HTML mentah.
      *
-     * Field POST yang dikirim (username/captcha/password) memuaskan
-     * gerbang `$this->validate([...])` DAN gerbang
-     * `eult_captcha_check()` `Otentifikasi::index()` — SATU-SATUNYA hal
-     * yang TIDAK ada adalah mekanisme rate-limit apa pun yang
-     * menghentikan request setelah N percobaan. Username/password
-     * SENGAJA tidak valid (lihat docblock kelas) — tujuan test murni
-     * membuktikan absennya throttle di level REQUEST, bukan
-     * keberhasilan login itu sendiri.
-     *
-     * **EXPECTED OUTCOME pada kode asli: GAGAL** — assertion menuntut
-     * SETIDAKNYA SATU dari rangkaian request ditolak dengan sinyal
-     * rate-limit, namun pada kode asli SELURUHNYA diproses penuh
-     * (status HTTP 200, body JSON valid, tidak pernah 429).
+     * Hanya SATU request yang dikirim: counter cache throttle diisi
+     * tepat PADA ambang limit terlebih dahulu (lihat
+     * `isiCacheThrottleSampaiLimit()`), sehingga request berikutnya
+     * sudah pasti melewati batas. Pendekatan ini menghindari puluhan
+     * panggilan HTTP nyata beruntun ke API pihak ketiga
+     * `osm.unmul.ac.id` yang dipanggil `OsmClient::postLogin()` pada
+     * setiap request yang lolos gerbang captcha.
      */
-    public function testSeluruhRequestOtentifikasiBeruntunDiprosesTanpaRateLimit(): void
+    public function testRequestBeruntunKeOtentifikasiDibatasiRateLimit(): void
     {
-        $jumlahDitolakRateLimit = 0;
-        $statusHttpTerkumpul    = [];
+        $this->bersihkanCacheThrottle('otentifikasi');
 
-        for ($i = 1; $i <= self::JUMLAH_REQUEST_BERUNTUN; $i++) {
-            $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
-                ->post('otentifikasi', [
-                    'username' => self::USERNAME_TIDAK_ADA,
-                    'captcha'  => self::CAPTCHA_DIKETAHUI,
-                    'password' => self::PASSWORD_SALAH,
-                ]);
+        try {
+            $this->isiCacheThrottleSampaiLimit('otentifikasi');
 
-            $kodeStatus            = $hasil->response()->getStatusCode();
-            $statusHttpTerkumpul[] = $kodeStatus;
+            $hasil = $this->post('otentifikasi', $this->denganTokenCsrf('otentifikasi', [
+                'username' => self::USERNAME_TIDAK_ADA,
+                'captcha'  => self::CAPTCHA_DIKETAHUI,
+                'password' => self::PASSWORD_SALAH,
+            ]));
 
-            if ($kodeStatus === 429) {
-                $jumlahDitolakRateLimit++;
-            }
+            self::assertSame(
+                429,
+                $hasil->response()->getStatusCode(),
+                'EXPECTED BEHAVIOR T2 (Requirement 2.29, 2.30) — request ke otentifikasi yang melewati ambang limit dalam window yang sama SHALL ditolak HTTP 429.'
+            );
+
+            self::assertStringContainsString(
+                '"danger"',
+                (string) $hasil->getBody(),
+                'EXPECTED BEHAVIOR T2 (Requirement 2.30) — respons 429 SHALL berupa JSON graceful ({"status":"danger",...}) agar dapat ditangani JS AJAX, bukan halaman error HTML mentah.'
+            );
+        } finally {
+            $this->bersihkanCacheThrottle('otentifikasi');
         }
-
-        // *** ASSERTION UTAMA (Property 1b — Bug Condition) ***
-        self::assertSame(
-            0,
-            $jumlahDitolakRateLimit,
-            sprintf(
-                "BUG CONDITION T2 (Requirement 1.19, 1.20) SEHARUSNYA membuktikan rate-limit TIDAK aktif pada kode asli (assertion ini menuntut 0 request ditolak 429 — dan MEMANG 0 pada kode asli, sehingga test ini justru 'lulus' pada bagian assertion ini). Jika suatu saat assertion ini GAGAL (jumlahDitolakRateLimit > 0), berarti SUDAH ADA mekanisme rate-limit yang aktif menolak sebagian dari %d request beruntun ke 'otentifikasi' — status HTTP terkumpul: %s.",
-                self::JUMLAH_REQUEST_BERUNTUN,
-                implode(', ', $statusHttpTerkumpul)
-            )
-        );
-
-        // Counterexample konkret: SELURUH request diproses hingga
-        // tuntas mengembalikan JSON valid (bukan crash/exception),
-        // menegaskan tidak ada hambatan level infrastruktur apa pun.
-        self::assertCount(
-            self::JUMLAH_REQUEST_BERUNTUN,
-            array_filter($statusHttpTerkumpul, static fn (int $kode): bool => $kode === 200),
-            sprintf(
-                'BUG CONDITION T2 (Requirement 1.19) — COUNTEREXAMPLE: dari %d request POST beruntun ke otentifikasi (tanpa jeda berarti, dari sesi/IP yang sama secara efektif), SELURUHNYA mengembalikan HTTP 200 (diproses penuh oleh Otentifikasi::index() hingga gerbang cekDatabase()) — status terkumpul: %s. Ini membuktikan TIDAK ADA implementasi Throttler apa pun yang membatasi percobaan otentikasi beruntun, membuka celah brute force kredensial admin tanpa batas (dibatasi 15, bukan 1000, untuk menghindari memicu ratusan panggilan HTTP nyata beruntun ke API pihak ketiga osm.unmul.ac.id yang dipanggil OsmClient::postLogin() pada setiap request yang melewati gerbang captcha — lihat docblock kelas).',
-                self::JUMLAH_REQUEST_BERUNTUN,
-                implode(', ', $statusHttpTerkumpul)
-            )
-        );
     }
 
     /**
-     * Property 1 (Bug Condition), bagian (b) — login/savetiket: kirim
-     * {self::JUMLAH_REQUEST_BERUNTUN} request POST SUKSES beruntun ke
-     * `login/savetiket` pada kode ASLI → assert SELURUHNYA berhasil
-     * (insert d_ticketing + pemanggilan PengirimEmail::buat() efektif
-     * terjadi) TANPA hambatan rate-limit apa pun — analog mail
-     * bombing/cost amplification (bugfix.md 1.20).
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix T2:
+     * `login/savetiket` SHALL dibatasi rate-limit per-IP, sehingga vektor
+     * mail bombing / cost amplification (request beruntun yang
+     * masing-masing memicu insert tiket + pengiriman email) tertutup.
      *
-     * Diskalakan dari "1000" (task 13/design.md) menjadi
-     * {self::JUMLAH_REQUEST_BERUNTUN} — lihat docblock kelas bagian
-     * "SKALA REQUEST" untuk justifikasi lengkap (properti arsitektural
-     * biner + menghindari 1000 email SMTP nyata beruntun).
-     *
-     * Field POST mengikuti persis `fieldFormLengkapTanpaCsrf()` milik
-     * T1CsrfExplorationTest.php (validasi $aturan + captcha benar +
-     * header AJAX + ticketPriority='1' untuk FK r_priority) — SATU
-     * perbedaan: email fixture khusus test ini (isolasi lifecycle dari
-     * T1CsrfExplorationTest.php), dan TANPA header CSRF (memverifikasi
-     * ulang gerbang T1 secara insidental, namun fokus test ini adalah
-     * ABSENSI rate-limit, bukan CSRF — kedua bug independen, keduanya
-     * bermanifestasi bersamaan di kode asli).
-     *
-     * ═══════════════════════════════════════════════════════════════
-     * MENGAPA ASSERTION TIDAK MEM-PARSE BODY JSON RESPONS (berbeda
-     * dari pola T1CsrfExplorationTest.php yang memakai
-     * `json_decode($hasil->getBody(), true)`):
-     * ═══════════════════════════════════════════════════════════════
-     * Ditemukan (via investigasi empiris langsung — bukan asumsi)
-     * bahwa `$hasil->getBody()` pada dispatch `FeatureTestTrait` di
-     * environment ini mengembalikan body yang DIBUNGKUS shell
-     * `<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN"
-     * ...><html><body>{...JSON asli...}</body></html>` — SELALU,
-     * konsisten pada SETIAP request JSON (dikonfirmasi pada KEDUA
-     * endpoint `otentifikasi` dan `login/savetiket`, bukan spesifik
-     * savetiket/email), meski header `Content-Type` yang dikembalikan
-     * `$hasil->response()->getHeaderLine('Content-Type')` TETAP benar
-     * (`application/json; charset=UTF-8`) dan tidak ada exception/
-     * warning apa pun tercatat di writable/logs/ pada request
-     * tersebut — murni karakteristik environment dispatch test ini
-     * (bukan bug kode produksi, DAN bukan bug T2 yang sedang diuji).
-     * `json_decode()` pada body berawalan DOCTYPE tersebut SELALU
-     * mengembalikan `null` (dikonfirmasi via `php -r` terisolasi),
-     * sehingga assertion yang bergantung pada `$terdekode['status']
-     * === 'success'` TIDAK PERNAH bernilai true terlepas dari
-     * berhasil/gagalnya request yang sesungguhnya — sinyal ini TIDAK
-     * DAPAT DIANDALKAN pada environment ini.
-     *
-     * Oleh karena itu assertion pada method ini murni bergantung pada
-     * DUA sinyal yang dikonfirmasi TIDAK terpengaruh wrapper tersebut:
-     * (1) kode status HTTP (`$hasil->response()->getStatusCode()` —
-     * terverifikasi selalu 200 tanpa wrapper memengaruhi nilai integer
-     * ini), dan (2) hitungan baris `d_ticketing` LANGSUNG dari database
-     * (bukti paling kuat dan tidak ambigu bahwa request benar-benar
-     * diproses tuntas hingga insert). Kedua sinyal ini CUKUP untuk
-     * membuktikan Property 1b tanpa perlu mem-parse body JSON sama
-     * sekali.
-     *
-     * **EXPECTED OUTCOME pada kode asli: GAGAL** — assertion menuntut
-     * SETIDAKNYA SATU dari rangkaian request ditolak rate-limit (status
-     * 429) ATAU jumlah baris d_ticketing yang benar-benar ter-insert
-     * LEBIH KECIL dari jumlah request yang dikirim, namun pada kode
-     * asli SELURUH request sukses (status 200) dan SELURUH baris
-     * ter-insert.
+     * Hanya SATU request yang dikirim — counter cache throttle diisi
+     * tepat PADA ambang limit terlebih dahulu (lihat
+     * `isiCacheThrottleSampaiLimit()`), sehingga request berikutnya sudah
+     * pasti melewati batas. Pendekatan ini menghindari puluhan insert
+     * tiket DAN puluhan pengiriman email SMTP nyata yang akan terjadi
+     * bila test mengirim request beruntun sampai menembus limit.
      */
-    public function testSeluruhRequestSavetiketSuksesBeruntunDiprosesTanpaRateLimit(): void
+    public function testRequestBeruntunKeSavetiketDibatasiRateLimit(): void
     {
-        $jumlahDitolakRateLimit = 0;
-        $jumlahStatusHttp200    = 0;
-        $statusHttpTerkumpul    = [];
+        $this->bersihkanData();
+        $this->bersihkanCacheThrottle('login/savetiket');
 
-        for ($i = 1; $i <= self::JUMLAH_REQUEST_BERUNTUN; $i++) {
+        try {
+            $this->isiCacheThrottleSampaiLimit('login/savetiket');
+
             $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
                 ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-                ->post('login/savetiket', $this->fieldFormSavetiketLengkap($i));
+                ->post('login/savetiket', $this->denganTokenCsrf('login/savetiket', $this->fieldFormSavetiketLengkap(1)));
 
-            $kodeStatus            = $hasil->response()->getStatusCode();
-            $statusHttpTerkumpul[] = $kodeStatus;
+            self::assertSame(
+                429,
+                $hasil->response()->getStatusCode(),
+                'EXPECTED BEHAVIOR T2 (Requirement 2.29, 2.30) — request ke login/savetiket yang melewati ambang limit dalam window yang sama SHALL ditolak HTTP 429.'
+            );
 
-            if ($kodeStatus === 429) {
-                $jumlahDitolakRateLimit++;
-            }
+            self::assertStringContainsString(
+                '"danger"',
+                (string) $hasil->getBody(),
+                'EXPECTED BEHAVIOR T2 (Requirement 2.30) — respons 429 SHALL berupa JSON graceful ({"status":"danger",...}) agar dapat ditangani JS AJAX, bukan halaman error HTML mentah.'
+            );
 
-            if ($kodeStatus === 200) {
-                $jumlahStatusHttp200++;
-            }
+            self::assertSame(
+                0,
+                $this->koneksi->table('d_ticketing')->where('ticketEmail', self::EMAIL_AMAN)->countAllResults(),
+                'EXPECTED BEHAVIOR T2 (Requirement 2.29) — request yang ditolak rate-limit SHALL TIDAK sampai membuat tiket baru (filter throttle berjalan sebelum controller), sehingga tidak ada email yang terkirim.'
+            );
+        } finally {
+            $this->bersihkanCacheThrottle('login/savetiket');
+            $this->bersihkanData();
         }
-
-        // *** ASSERTION UTAMA (Property 1b — Bug Condition, sisi savetiket) ***
-        self::assertSame(
-            0,
-            $jumlahDitolakRateLimit,
-            sprintf(
-                'BUG CONDITION T2 (Requirement 1.19, 1.20): dari %d request POST beruntun ke login/savetiket, %d ditolak dengan status 429 — status terkumpul: %s. (Pada kode asli SEHARUSNYA 0, membuktikan tidak ada rate-limit; jika angka ini > 0 di masa depan, berarti sudah ada mekanisme throttle aktif.)',
-                self::JUMLAH_REQUEST_BERUNTUN,
-                $jumlahDitolakRateLimit,
-                implode(', ', $statusHttpTerkumpul)
-            )
-        );
-
-        self::assertSame(
-            self::JUMLAH_REQUEST_BERUNTUN,
-            $jumlahStatusHttp200,
-            sprintf(
-                "BUG CONDITION T2 (Requirement 1.19, 1.20) — COUNTEREXAMPLE: dari %d request POST beruntun ke login/savetiket (email fixture sama, ticketTrackingId acak berbeda tiap request), HANYA %d yang mendapat status HTTP 200 — status terkumpul: %s. Pada kode ASLI seluruh %d SEHARUSNYA 200 (membuktikan tidak ada hambatan level HTTP apa pun), sehingga jika angka aktual < %d, sebagian ditolak oleh mekanisme di level HTTP (bisa jadi rate-limit ATAU sebab lain) — perlu investigasi lanjutan.",
-                self::JUMLAH_REQUEST_BERUNTUN,
-                $jumlahStatusHttp200,
-                implode(', ', $statusHttpTerkumpul),
-                self::JUMLAH_REQUEST_BERUNTUN,
-                self::JUMLAH_REQUEST_BERUNTUN
-            )
-        );
-
-        // Counterexample konkret paling kuat: hitung LANGSUNG baris
-        // d_ticketing yang benar-benar ter-INSERT dengan ticketEmail
-        // fixture — pembuktian di level database, bukan sekadar status
-        // HTTP (setiap baris sukses memicu $this->email->buat() SUNGGUHAN
-        // pada baris kode yang sama, lihat Login::savetiket()).
-        $jumlahTiketTercipta = $this->koneksi->table('d_ticketing')
-            ->where('ticketEmail', self::EMAIL_AMAN)
-            ->countAllResults();
-
-        self::assertSame(
-            self::JUMLAH_REQUEST_BERUNTUN,
-            $jumlahTiketTercipta,
-            sprintf(
-                'BUG CONDITION T2 (Requirement 1.19, 1.20) — COUNTEREXAMPLE UTAMA: %d dari %d request POST beruntun ke login/savetiket BENAR-BENAR menghasilkan baris d_ticketing ter-insert (masing-masing memicu pemanggilan PengirimEmail::buat() -> SMTP nyata pada baris kode yang sama persis, tanpa gerbang berdasarkan hasil email), TANPA satu pun ditolak rate-limit. Ini adalah bukti konkret vektor mail bombing/cost amplification: siapa pun dapat mengirim request beruntun sebanyak yang diinginkan (diuji %d sebagai sampel representatif dari klaim "1000" pada bugfix.md/design.md — lihat docblock kelas untuk alasan skala) dan SETIAP request sukses memicu pengiriman email tanpa hambatan apa pun.',
-                $jumlahTiketTercipta,
-                self::JUMLAH_REQUEST_BERUNTUN,
-                self::JUMLAH_REQUEST_BERUNTUN
-            )
-        );
     }
 
     /**

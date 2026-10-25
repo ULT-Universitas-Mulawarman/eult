@@ -5,6 +5,8 @@ namespace Tests\Bugfix;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
+use Config\Throttle as ThrottleConfig;
 
 /**
  * Task 16 — Test eksplorasi bug condition M3: "Enumerasi Nomor Tiket
@@ -147,9 +149,6 @@ final class M3TicketEnumerationExplorationTest extends CIUnitTestCase
 {
     use FeatureTestTrait;
 
-    /** Jumlah request beruntun — reuse skala T2CaptchaRateLimitExplorationTest, lihat docblock kelas untuk justifikasi. */
-    private const JUMLAH_REQUEST_BERUNTUN = 15;
-
     /**
      * Nomor tiket VALID sungguhan, terverifikasi ada di d_ticketing
      * (sama seperti dipakai K1SqlInjectionPreservationTest.php dan
@@ -166,6 +165,60 @@ final class M3TicketEnumerationExplorationTest extends CIUnitTestCase
     private const PESAN_TIDAK_DITEMUKAN = 'Nomor tiket tidak ditemukan.';
 
     private BaseConnection $koneksi;
+
+    /**
+     * Kunci cache rate-limit `login/cektiket`, dibangun PERSIS mengikuti
+     * format `App\Filters\ThrottleFilter::before()` memakai IP yang sama
+     * dengan request test.
+     */
+    private function kunciCacheThrottle(): string
+    {
+        $request = $this->setupRequest('POST', 'login/cektiket');
+        $ip      = $request->getIPAddress();
+
+        return 'throttle_login_cektiket_' . $ip;
+    }
+
+    private function bersihkanCacheThrottle(): void
+    {
+        Services::cache()->delete($this->kunciCacheThrottle());
+    }
+
+    /**
+     * Menaruh counter throttle tepat PADA ambang limit dalam window yang
+     * masih aktif, sehingga SATU request berikutnya sudah melewati batas
+     * dan SHALL ditolak 429 — membuktikan penolakan tanpa harus mengirim
+     * puluhan request beruntun.
+     */
+    private function isiCacheThrottleSampaiLimit(): void
+    {
+        $konfig = config(ThrottleConfig::class);
+        $limit  = (int) ($konfig->routes['login/cektiket']['limit'] ?? $konfig->default['limit']);
+
+        Services::cache()->save(
+            $this->kunciCacheThrottle(),
+            ['count' => $limit, 'resetAt' => time() + 60],
+            60
+        );
+    }
+
+    /**
+     * Menambahkan token CSRF ke payload POST. `injectMock('request')` +
+     * `resetSingle('security')` diperlukan agar security service dibangun
+     * terhadap IncomingRequest (bukan CLIRequest) — pola yang sama dipakai
+     * T2M3RateLimitHttpIntegrationTest.
+     *
+     * @param array<string, string> $field
+     *
+     * @return array<string, string>
+     */
+    private function denganTokenCsrf(array $field): array
+    {
+        Services::injectMock('request', $this->setupRequest('POST', 'login/cektiket'));
+        Services::resetSingle('security');
+
+        return array_merge($field, [csrf_token() => csrf_hash()]);
+    }
 
     protected function setUp(): void
     {
@@ -198,171 +251,80 @@ final class M3TicketEnumerationExplorationTest extends CIUnitTestCase
      */
 
     /**
-     * Property 1 (Bug Condition) — M3: kirim
-     * {self::JUMLAH_REQUEST_BERUNTUN} request POST beruntun ke
-     * `login/cektiket` (mix nomor tiket VALID diketahui dan nomor tiket
-     * TIDAK ADA/tebakan) pada kode ASLI → assert PERILAKU YANG
-     * SEHARUSNYA (setelah fix task 19 memasang rate-limit yang sama
-     * seperti T2 pada endpoint ini):
-     * (a) [ASSERTION UTAMA] SETIDAKNYA SATU dari rangkaian request
-     *     SEHARUSNYA ditolak dengan sinyal rate-limit (429 atau respons
-     *     setara) — persis anchor task 19.3 ("request ke-(N+1)
-     *     mengembalikan 429") — namun pada kode ASLI 0 yang ditolak,
-     *     sehingga assertion ini GAGAL sekarang (mengonfirmasi bug ada)
-     *     dan akan LULUS begitu fix M3/T2 terpasang,
-     * (b) [bukti diagnostik pendukung, BUKAN assertion utama] sinyal
-     *     "ditemukan" vs "tidak ditemukan" tetap DAPAT DIBEDAKAN secara
-     *     konsisten sepanjang rangkaian 15 request PADA KODE ASLI (yang
-     *     memang tidak punya hambatan apa pun) — ini adalah oracle
-     *     konkret yang memperkuat pembuktian bahwa enumerasi
-     *     benar-benar dapat dieksploitasi pada skala ini selama tidak
-     *     ada rate-limit, bukan sekadar "request diproses" tanpa makna.
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix M3/T2:
+     * enumerasi nomor tiket pada `login/cektiket` SHALL dibatasi
+     * rate-limit per-IP, SEKALIGUS oracle pembeda
+     * "ditemukan"/"tidak ditemukan" tetap berlaku normal untuk request
+     * yang masih dalam ambang batas (fix rate-limit TIDAK mengubah pesan
+     * spesifik menjadi generik — kontrol primernya adalah pembatasan
+     * laju request, bukan penyamaran pesan).
      *
-     * Rangkaian request MEMBAGI GANJIL/GENAP: indeks ganjil mengirim
-     * {self::NOMOR_TIKET_VALID} (harus konsisten "ditemukan" di
-     * SETIAP kemunculan), indeks genap mengirim nomor tebakan acak
-     * unik per-iterasi (format sama dengan pola existing
-     * `XXXX-XXXX-NNN`, hampir pasti TIDAK match record apa pun —
-     * harus konsisten "tidak ditemukan" di SETIAP kemunculan). Pola
-     * berselang-seling ini secara eksplisit menguji bahwa oracle tidak
-     * "rusak"/tidak konsisten akibat rate-limit PARSIAL (skenario di
-     * mana request masih lolos status 200 namun pesannya mulai
-     * generik/berubah setelah N request — tidak terjadi pada kode asli
-     * karena tidak ada mekanisme apa pun yang mengubah perilaku setelah
-     * N request, namun assertion diagnostik (b) tetap memverifikasi hal
-     * tersebut secara eksplisit alih-alih berasumsi).
-     *
-     * **EXPECTED OUTCOME pada kode asli: GAGAL** — assertion utama (a)
-     * menuntut SETIDAKNYA SATU dari rangkaian request ditolak
-     * rate-limit (sinyal konkret bahwa suatu mekanisme throttle SUDAH
-     * aktif membatasi enumerasi, sejalan dengan task 19.3: "request
-     * ke-(N+1) mengembalikan 429"), namun pada kode asli SELURUH
-     * {self::JUMLAH_REQUEST_BERUNTUN} request diproses penuh (200)
-     * TANPA satu pun ditolak — membuktikan enumerasi nomor tiket dapat
-     * dilakukan secara masif tanpa hambatan apa pun.
+     * Pembuktian penolakan hanya memerlukan SATU request: counter cache
+     * throttle diisi tepat PADA ambang limit terlebih dahulu (lihat
+     * `isiCacheThrottleSampaiLimit()`), bukan dengan mengirim puluhan
+     * request beruntun.
      */
-    public function testEnumerasiNomorTiketBeruntunDiprosesTanpaRateLimitDanSinyalTetapTerbedakan(): void
+    public function testEnumerasiNomorTiketDibatasiRateLimitDanSinyalTetapTerbedakan(): void
     {
-        $jumlahDitolakRateLimit           = 0;
-        $jumlahStatusHttp200              = 0;
-        $jumlahSinyalDitemukanBenar       = 0;
-        $jumlahSinyalTidakDitemukanBenar  = 0;
-        $statusHttpTerkumpul              = [];
-        $ringkasanPerIterasi              = [];
+        $this->bersihkanCacheThrottle();
 
-        for ($i = 1; $i <= self::JUMLAH_REQUEST_BERUNTUN; $i++) {
-            $ganjil       = ($i % 2) === 1;
-            $nomorDikirim = $ganjil
-                ? self::NOMOR_TIKET_VALID
-                : sprintf('ZZZZ-TEBK-%03d-ENUM%d', $i, $i);
+        try {
+            // (1) Oracle pembeda tetap berfungsi untuk request DALAM limit.
+            $hasilValid = $this->post('login/cektiket', $this->denganTokenCsrf([
+                'nomorTiket' => self::NOMOR_TIKET_VALID,
+            ]));
 
-            $hasil = $this->post('login/cektiket', [
-                'nomorTiket' => $nomorDikirim,
-            ]);
+            $hasilValid->assertStatus(200);
 
-            $kodeStatus            = $hasil->response()->getStatusCode();
-            $statusHttpTerkumpul[] = $kodeStatus;
-            $bodiMentah            = (string) $hasil->getBody();
+            $bodiValid = (string) $hasilValid->getBody();
 
-            if ($kodeStatus === 429) {
-                $jumlahDitolakRateLimit++;
-            }
-
-            if ($kodeStatus === 200) {
-                $jumlahStatusHttp200++;
-            }
-
-            $mengandungDitemukan     = str_contains($bodiMentah, self::PESAN_DITEMUKAN);
-            $mengandungTidakDitemukan = str_contains($bodiMentah, self::PESAN_TIDAK_DITEMUKAN);
-
-            if ($ganjil && $mengandungDitemukan && ! $mengandungTidakDitemukan) {
-                $jumlahSinyalDitemukanBenar++;
-            }
-
-            if (! $ganjil && $mengandungTidakDitemukan && ! $mengandungDitemukan) {
-                $jumlahSinyalTidakDitemukanBenar++;
-            }
-
-            $ringkasanPerIterasi[] = sprintf(
-                '#%d[nomor=%s,status=%d,ditemukan=%s,tidakDitemukan=%s]',
-                $i,
-                $nomorDikirim,
-                $kodeStatus,
-                $mengandungDitemukan ? '1' : '0',
-                $mengandungTidakDitemukan ? '1' : '0'
+            self::assertStringContainsString(
+                self::PESAN_DITEMUKAN,
+                $bodiValid,
+                sprintf(
+                    "Property 2 M3: nomor tiket VALID (%s) SHALL menghasilkan pesan '%s' selama request masih dalam ambang batas.",
+                    self::NOMOR_TIKET_VALID,
+                    self::PESAN_DITEMUKAN
+                )
             );
+
+            $hasilTebakan = $this->post('login/cektiket', $this->denganTokenCsrf([
+                'nomorTiket' => 'ZZZZ-TEBK-001-ENUM01',
+            ]));
+
+            $hasilTebakan->assertStatus(200);
+
+            $bodiTebakan = (string) $hasilTebakan->getBody();
+
+            self::assertStringContainsString(
+                self::PESAN_TIDAK_DITEMUKAN,
+                $bodiTebakan,
+                sprintf(
+                    "Property 2 M3: nomor tiket TEBAKAN SHALL menghasilkan pesan '%s' selama request masih dalam ambang batas.",
+                    self::PESAN_TIDAK_DITEMUKAN
+                )
+            );
+
+            // (2) Melewati ambang limit → enumerasi masif terhenti (429).
+            $this->isiCacheThrottleSampaiLimit();
+
+            $hasilDitolak = $this->post('login/cektiket', $this->denganTokenCsrf([
+                'nomorTiket' => self::NOMOR_TIKET_VALID,
+            ]));
+
+            self::assertSame(
+                429,
+                $hasilDitolak->response()->getStatusCode(),
+                'EXPECTED BEHAVIOR M3 (Requirement 2.30, 2.42) — request ke login/cektiket yang melewati ambang limit dalam window yang sama SHALL ditolak HTTP 429, sehingga enumerasi nomor tiket tidak dapat dilakukan secara masif.'
+            );
+
+            self::assertStringContainsString(
+                '"danger"',
+                (string) $hasilDitolak->getBody(),
+                'EXPECTED BEHAVIOR M3 (Requirement 2.30) — respons 429 SHALL berupa JSON graceful ({"status":"danger",...}), bukan halaman error HTML mentah.'
+            );
+        } finally {
+            $this->bersihkanCacheThrottle();
         }
-
-        $jumlahIterasiGanjil = (int) ceil(self::JUMLAH_REQUEST_BERUNTUN / 2);
-        $jumlahIterasiGenap  = self::JUMLAH_REQUEST_BERUNTUN - $jumlahIterasiGanjil;
-
-        // *** ASSERTION UTAMA (a) — Property 1, Bug Condition M3 ***
-        // Assert PERILAKU YANG SEHARUSNYA (setelah fix task 19 memasang
-        // rate-limit yang sama seperti T2 pada login/cektiket): SETIDAKNYA
-        // SATU dari rangkaian request beruntun ini SEHARUSNYA ditolak
-        // (429) begitu throttle aktif — persis anchor task 19.3
-        // ("request ke-(N+1) mengembalikan 429"). Pada kode ASLI belum
-        // diperbaiki, jumlahDitolakRateLimit MEMANG 0 (tidak ada throttle
-        // apa pun) — sehingga assertion GreaterThan(0) ini GAGAL sekarang,
-        // mengonfirmasi bug ada, dan akan LULUS begitu fix M3/T2 terpasang.
-        self::assertGreaterThan(
-            0,
-            $jumlahDitolakRateLimit,
-            sprintf(
-                "BUG CONDITION M3 (Requirement 1.30) — COUNTEREXAMPLE: dari %d request POST beruntun ke login/cektiket, 0 yang ditolak dengan sinyal rate-limit (429) — rincian per-iterasi: %s. SETELAH fix (task 19, rate-limit yang sama seperti T2), SETIDAKNYA SATU dari rangkaian ini SEHARUSNYA ditolak 429 begitu ambang batas request/menit terlampaui; pada kode asli TIDAK SATU PUN ditolak, membuktikan enumerasi nomor tiket dapat dilakukan secara masif tanpa hambatan rate-limit apa pun.",
-                self::JUMLAH_REQUEST_BERUNTUN,
-                implode(', ', $ringkasanPerIterasi)
-            )
-        );
-
-        self::assertSame(
-            self::JUMLAH_REQUEST_BERUNTUN,
-            $jumlahStatusHttp200,
-            sprintf(
-                'BUG CONDITION M3 (Requirement 1.30) — COUNTEREXAMPLE: dari %d request POST beruntun ke login/cektiket, HANYA %d yang mendapat status HTTP 200 — status terkumpul: %s. Pada kode ASLI seluruh %d SEHARUSNYA 200 (tidak ada hambatan level HTTP apa pun) — assertion ini dipertahankan sebagai bukti diagnostik pendukung (bukan assertion utama bug condition; lihat assertion GreaterThan di atas untuk sinyal utama yang membedakan sebelum/setelah fix), mengonfirmasi request benar-benar diproses tuntas hingga level HTTP, bukan gagal karena sebab lain.',
-                self::JUMLAH_REQUEST_BERUNTUN,
-                $jumlahStatusHttp200,
-                implode(', ', $statusHttpTerkumpul),
-                self::JUMLAH_REQUEST_BERUNTUN
-            )
-        );
-
-        // *** ASSERTION PENDUKUNG (b) — Property 1, Bug Condition M3 ***
-        // BUKAN assertion utama bug condition (lihat assertGreaterThan
-        // di atas untuk sinyal utama) — dipertahankan sebagai bukti
-        // diagnostik bahwa oracle ditemukan/tidak-ditemukan BENAR-BENAR
-        // dapat dibedakan secara konsisten pada SETIAP request sepanjang
-        // rangkaian ini SELAMA tidak ada throttle yang menghalangi (pada
-        // kode asli: konsisten karena TIDAK ADA hambatan apa pun; setelah
-        // fix: sebagian request akan ditolak 429 SEBELUM mencapai oracle
-        // ini sama sekali — lihat assertion utama (a)). Nilai diagnostik
-        // ganjil/genap dan ringkasan per-iterasi dipertahankan apa adanya
-        // sesuai instruksi — hanya label/framing yang diperbarui di sini.
-        self::assertSame(
-            $jumlahIterasiGanjil,
-            $jumlahSinyalDitemukanBenar,
-            sprintf(
-                "BUG CONDITION M3 (Requirement 1.29, 1.30) — bukti diagnostik pendukung (sinyal 'ditemukan'): dari %d request dengan nomor tiket VALID (%s), HANYA %d yang mengembalikan pesan 'Nomor tiket ditemukan...' secara bersih (tanpa pesan 'tidak ditemukan' ikut muncul) — rincian per-iterasi: %s. Pada kode ASLI seluruh %d konsisten menampilkan sinyal 'ditemukan' (karena tidak ada hambatan rate-limit apa pun) — mengonfirmasi oracle pembeda valid/tidak-valid benar-benar usable pada skala ini, memperkuat assertion utama (a) bahwa enumerasi sungguh dapat dieksploitasi.",
-                $jumlahIterasiGanjil,
-                self::NOMOR_TIKET_VALID,
-                $jumlahSinyalDitemukanBenar,
-                implode(', ', $ringkasanPerIterasi),
-                $jumlahIterasiGanjil,
-                self::JUMLAH_REQUEST_BERUNTUN
-            )
-        );
-
-        self::assertSame(
-            $jumlahIterasiGenap,
-            $jumlahSinyalTidakDitemukanBenar,
-            sprintf(
-                "BUG CONDITION M3 (Requirement 1.29, 1.30) — bukti diagnostik pendukung (sinyal 'tidak ditemukan'): dari %d request dengan nomor tiket TEBAKAN/TIDAK ADA, HANYA %d yang mengembalikan pesan 'Nomor tiket tidak ditemukan.' secara bersih (tanpa pesan 'ditemukan' ikut muncul) — rincian per-iterasi: %s. Pada kode ASLI seluruh %d konsisten menampilkan sinyal 'tidak ditemukan' (karena tidak ada rate-limit apa pun menghalangi), memperkuat assertion utama (a): penyerang dapat membedakan nomor tiket tidak valid secara reliable sepanjang %d request beruntun TANPA hambatan (bugfix.md 1.30: 'penyerang dapat melakukan enumerasi nomor tiket valid secara masif').",
-                $jumlahIterasiGenap,
-                $jumlahSinyalTidakDitemukanBenar,
-                implode(', ', $ringkasanPerIterasi),
-                $jumlahIterasiGenap,
-                self::JUMLAH_REQUEST_BERUNTUN
-            )
-        );
     }
 }

@@ -3,6 +3,7 @@
 namespace Tests\Bugfix;
 
 use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\Security\Exceptions\SecurityException;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
 
@@ -272,54 +273,39 @@ final class T1CsrfExplorationTest extends CIUnitTestCase
      */
     public function testPostSavetiketTanpaTokenCsrfDitolakDenganResponsErrorDanTidakAdaInsert(): void
     {
-        $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
-            ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
-            ->post('login/savetiket', $this->fieldFormLengkapTanpaCsrf());
+        $ditolakKarenaCsrf = false;
 
-        // *** ASSERTION UTAMA (Property 1 — Bug Condition) ***
-        // Pada kode SETELAH fix T1 (filter csrf aktif + request ini
-        // tidak menyertakan token), CI4 SHALL menolak request dengan
-        // status HTTP error (403 secara default, atau — bila handler
-        // graceful task 18.3 sudah diimplementasikan — status 200
-        // dengan body JSON {'status': 'danger', ...}, TIDAK PERNAH
-        // 'success'). Pada kode ASLI (filter csrf nonaktif), request
-        // akan lolos ke logika controller dan MENGHASILKAN status 200
-        // dengan body {'status': 'success', ...} — sehingga assertion
-        // "status SHALL BUKAN 200-dengan-success" GAGAL pada kode asli,
-        // membuktikan bug T1 (tidak ada validasi CSRF apa pun).
-        //
-        // CATATAN KOREKSI (ditemukan selama investigasi task 13 —
-        // T2CaptchaRateLimitExplorationTest.php): `$hasil->getBody()`
-        // pada dispatch FeatureTestTrait di environment ini SELALU
-        // dibungkus shell `<!DOCTYPE html>...<html><body>{json}</body>
-        // </html>` pada SETIAP respons JSON (bukan spesifik endpoint
-        // ini), sehingga `json_decode($body, true)` SELALU mengembalikan
-        // `null` — murni karakteristik environment dispatch, bukan bug
-        // T1 itu sendiri (lihat docblock kelas
-        // T2CaptchaRateLimitExplorationTest.php untuk investigasi
-        // lengkap). Akibatnya `$statusJson` di atas SELALU `null`,
-        // membuat `$statusJson !== 'success'` SELALU `true` — assertion
-        // menjadi tidak pernah bisa gagal, terlepas dari status HTTP
-        // sesungguhnya. Sinyal `$statusJson` dihapus; assertion ini kini
-        // murni bergantung pada kode status HTTP (sinyal yang
-        // dikonfirmasi TIDAK terpengaruh wrapper tersebut) — konsisten
-        // dengan pola T2CaptchaRateLimitExplorationTest.php.
-        $kodeStatus = $hasil->response()->getStatusCode();
-        $body       = $hasil->getBody();
+        try {
+            $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
+                ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+                ->post('login/savetiket', $this->fieldFormLengkapTanpaCsrf());
 
-        $requestDitolakKarenaCsrf = $kodeStatus >= 400;
+            $ditolakKarenaCsrf = $hasil->response()->getStatusCode() >= 400;
+        } catch (SecurityException $e) {
+            // Filter csrf global melempar SecurityException SEBELUM request
+            // mencapai controller. Pada dispatch in-process FeatureTestTrait
+            // exception ini tidak diubah menjadi respons (tidak ada tahap
+            // send()); pada HTTP nyata ia ditangani
+            // Config\Exceptions::handler() -> AjaxSecurityExceptionHandler
+            // menjadi respons JSON graceful — dibuktikan oleh
+            // T1CsrfAjaxGracefulHandlerHttpIntegrationTest (suite Live).
+            // Bagi test ini, pelemparan itu sendiri ADALAH bukti penolakan.
+            $ditolakKarenaCsrf = true;
+        }
 
+        // *** ASSERTION UTAMA — SETELAH fix T1 ***
+        // Filter csrf global aktif, sehingga request tanpa token SHALL
+        // ditolak. Dua manifestasi yang sama-sama sah: (a) pada dispatch
+        // in-process, SecurityException dilempar sebelum controller; (b)
+        // pada HTTP nyata, respons error JSON graceful dari
+        // AjaxSecurityExceptionHandler. Keduanya ditangkap di atas.
         self::assertTrue(
-            $requestDitolakKarenaCsrf,
-            sprintf(
-                "BUG CONDITION T1 (Requirement 1.15, 1.17): POST ke login/savetiket TANPA token/header CSRF apa pun SEHARUSNYA ditolak (filter global 'csrf' non-aktif di app/Config/Filters.php \$globals, dikonfirmasi masih dikomentari), namun request diproses PENUH — status HTTP %d, body mentah: %s. Ini membuktikan TIDAK ADA validasi CSRF sama sekali pada endpoint sensitif ini.",
-                $kodeStatus,
-                $body
-            )
+            $ditolakKarenaCsrf,
+            'EXPECTED BEHAVIOR T1 (Requirement 2.9, 2.11) — POST ke login/savetiket TANPA token/header CSRF apa pun SHALL ditolak: filter csrf global melempar SecurityException sebelum controller dijalankan (in-process), dan pada HTTP nyata menghasilkan respons error JSON melalui AjaxSecurityExceptionHandler.'
         );
 
-        // *** COUNTEREXAMPLE KONKRET — baris d_ticketing SUNGGUHAN
-        // ter-insert meski tidak ada token CSRF apa pun disertakan ***
+        // *** Konsekuensi konkret yang diharapkan: TIDAK ADA baris
+        // d_ticketing yang tercipta dari request tanpa token CSRF. ***
         $tiketTercipta = $this->koneksi->table('d_ticketing')
             ->where('ticketEmail', self::EMAIL_AMAN)
             ->get()->getRowArray();
@@ -335,22 +321,18 @@ final class T1CsrfExplorationTest extends CIUnitTestCase
     }
 
     /**
-     * Property 1 (Bug Condition), pelengkap struktural — pembuktian
-     * PROGRAMATIK (bukan visual/manual) Requirement 1.16: form buat
-     * tiket di `app/Views/layouts/login.php` TIDAK mengandung
-     * `csrf_field()`/`csrf_token()`/`csrf_hash()` apa pun.
+     * Property 2 (Preservation/Expected Behavior), pelengkap struktural —
+     * SETELAH fix T1: form buat tiket di `app/Views/layouts/login.php`
+     * SHALL menyertakan token CSRF (`csrf_field()`/`csrf_token()`), dan
+     * HTML hasil render-nya SHALL memuat input hidden bernama token CSRF
+     * default CI4 (`Config\Security::$tokenName`).
      *
      * Merender view produksi yang SAMA persis dengan yang dipakai
-     * `Login::index()` (bukan membaca file sebagai teks statis semata
-     * — merender memastikan tidak ada kondisi PHP tersembunyi yang
-     * secara dinamis menyisipkan token hanya pada kondisi tertentu
-     * yang tidak tertangkap pembacaan teks biasa), lalu mem-parse HTML
-     * hasil render untuk memastikan TIDAK ADA input hidden bernama
-     * `csrf_test_name` (nilai default `Config\Security::$tokenName`)
-     * DAN TIDAK ADA string literal `csrf_field(`/`csrf_token(`/
-     * `csrf_hash(` pada source PHP view itu sendiri.
+     * `Login::index()` (bukan membaca file sebagai teks statis semata —
+     * merender memastikan token benar-benar disisipkan pada HTML, bukan
+     * hanya ada di source).
      */
-    public function testFormLoginTidakMengandungPemanggilanCsrfFieldApaPun(): void
+    public function testFormLoginMengandungPemanggilanCsrfField(): void
     {
         $pathView = APPPATH . 'Views/layouts/login.php';
 
@@ -358,21 +340,20 @@ final class T1CsrfExplorationTest extends CIUnitTestCase
 
         $sumberView = (string) file_get_contents($pathView);
 
+        $pemanggilanDitemukan = false;
+
         foreach (['csrf_field(', 'csrf_token(', 'csrf_hash('] as $pemanggilan) {
-            self::assertStringNotContainsString(
-                $pemanggilan,
-                $sumberView,
-                sprintf(
-                    "BUG CONDITION T1 (Requirement 1.16): app/Views/layouts/login.php TIDAK SEHARUSNYA (pada kode asli) mengandung pemanggilan '%s' — namun ditemukan. Jika assertion ini gagal, form SUDAH menyertakan token CSRF (bug 1.16 mungkin sudah diperbaiki sebagian).",
-                    $pemanggilan
-                )
-            );
+            if (str_contains($sumberView, $pemanggilan)) {
+                $pemanggilanDitemukan = true;
+                break;
+            }
         }
 
-        // Verifikasi tambahan via render sungguhan + nama field token
-        // CSRF default CI4 (Config\Security::$tokenName, bawaan
-        // 'csrf_test_name') — memastikan tidak ada input hidden dengan
-        // nama tersebut pada HTML hasil render produksi.
+        self::assertTrue(
+            $pemanggilanDitemukan,
+            'EXPECTED BEHAVIOR T1 (Requirement 2.11): app/Views/layouts/login.php SHALL memanggil salah satu dari csrf_field()/csrf_token()/csrf_hash() agar form buat tiket membawa token CSRF.'
+        );
+
         $namaTokenCsrf = (string) config('Security')->tokenName;
 
         $htmlTerender = view('layouts/login', [
@@ -381,11 +362,11 @@ final class T1CsrfExplorationTest extends CIUnitTestCase
             'datas'      => false,
         ]);
 
-        self::assertStringNotContainsString(
+        self::assertStringContainsString(
             'name="' . $namaTokenCsrf . '"',
             $htmlTerender,
             sprintf(
-                "BUG CONDITION T1 (Requirement 1.16) — COUNTEREXAMPLE: HTML hasil render app/Views/layouts/login.php TIDAK SEHARUSNYA mengandung input dengan name=\"%s\" (nama token CSRF default CI4) pada kode asli, karena TIDAK ADA form yang memanggil csrf_field() sama sekali. Assertion ini menegaskan ulang temuan 1.16 secara terverifikasi-programatik (bukan sekadar pembacaan visual source).",
+                'EXPECTED BEHAVIOR T1 (Requirement 2.11) — HTML hasil render app/Views/layouts/login.php SHALL mengandung input dengan name="%s" (nama token CSRF default CI4) sehingga submit form lolos filter csrf global.',
                 $namaTokenCsrf
             )
         );

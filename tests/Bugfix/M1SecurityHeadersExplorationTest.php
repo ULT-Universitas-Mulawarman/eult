@@ -2,8 +2,10 @@
 
 namespace Tests\Bugfix;
 
+use CodeIgniter\HTTP\Response;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
 
 /**
  * Task 15 (Klaster 3 — M1): Test EKSPLORASI bug condition Header
@@ -65,49 +67,51 @@ final class M1SecurityHeadersExplorationTest extends CIUnitTestCase
     use FeatureTestTrait;
 
     /**
-     * Property 1 (Bug Condition) — SKENARIO UTAMA yang diminta task 15:
-     * dispatch `GET /` (halaman publik `Login::index()`, form
-     * login/buat/lacak tiket) pada kode ASLI, lalu assert response
-     * SHALL menyertakan header `Content-Security-Policy` DAN
-     * `X-Frame-Options` — dua nama header yang secara eksplisit
-     * disebut task 15.
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix M1:
+     * `GET /login` SHALL membawa header keamanan `X-Frame-Options`
+     * (dari filter `secureheaders`) DAN aplikasi SHALL mengaktifkan CSP
+     * (header `Content-Security-Policy` dihasilkan oleh
+     * `ContentSecurityPolicy::finalize()`).
      *
-     * **EXPECTED OUTCOME test ini pada kode asli: GAGAL** — assertion
-     * di bawah menuntut kedua header tersebut HADIR (non-empty), yang
-     * TIDAK akan terjadi pada kode asli (`$CSPEnabled = false` DAN
-     * filter `secureheaders` masih dikomentari), sehingga assertion
-     * gagal — kegagalan inilah yang menjadi counterexample yang
-     * membuktikan bug M1 ada.
+     * CATATAN PENTING — MENGAPA CSP DIPERIKSA LEWAT `finalize()`, BUKAN
+     * DARI RESPONS IN-PROCESS LANGSUNG:
+     * Header CSP baru ditempelkan framework pada SAAT RESPONS DIKIRIM
+     * (`CodeIgniter\HTTP\ContentSecurityPolicy::finalize()`, dipanggil di
+     * jalur `send()`), sehingga `FeatureTestTrait` — yang tidak memanggil
+     * `send()` — tidak akan pernah melihat header tersebut pada objek
+     * responsnya. Ini karakteristik harness, BUKAN kekurangan aplikasi:
+     * pembuktian header CSP benar-benar terkirim ke klien dilakukan oleh
+     * test HTTP sungguhan `M1CspHeaderHttpIntegrationTest` (suite Live),
+     * yang memverifikasi header pada respons cURL nyata. Di sini
+     * diverifikasi dua hal yang setara dan deterministik: CSP AKTIF, dan
+     * `finalize()` benar-benar menghasilkan header non-kosong.
      */
-    public function testHalamanPublikTidakMengandungHeaderCspDanXFrameOptions(): void
+    public function testHalamanPublikMengandungHeaderKeamananCspDanXFrameOptions(): void
     {
         $hasil = $this->get('login');
 
         $hasil->assertStatus(200);
 
-        $headerCsp         = $hasil->response()->getHeaderLine('Content-Security-Policy');
-        $headerXFrameOptions = $hasil->response()->getHeaderLine('X-Frame-Options');
-
-        // *** ASSERTION UTAMA (Property 1 — Bug Condition) ***
-        // Pada kode SETELAH fix M1 (`$CSPEnabled = true` +
-        // `secureheaders` aktif), kedua header ini SHALL selalu hadir
-        // (non-empty) pada response halaman publik apa pun. Pada kode
-        // ASLI, `getHeaderLine()` untuk header yang tidak pernah
-        // ditambahkan mengembalikan string kosong (''), sehingga
-        // `assertNotSame('', ...)` GAGAL — membuktikan header
-        // benar-benar absen, bukan berisi nilai yang salah.
         self::assertNotSame(
             '',
-            $headerCsp,
-            sprintf(
-                "BUG CONDITION M1 (Requirement 1.25) — COUNTEREXAMPLE: response GET /login (halaman publik Login::index()) TIDAK mengandung header 'Content-Security-Policy' sama sekali (nilai getHeaderLine() kosong), karena \$CSPEnabled = false pada app/Config/App.php:192. Ini membuktikan browser klien manapun tidak menerima instruksi CSP apa pun dari server, membuka permukaan serangan XSS/clickjacking/injection resource yang seharusnya dimitigasi CSP."
-            )
+            $hasil->response()->getHeaderLine('X-Frame-Options'),
+            "EXPECTED BEHAVIOR M1 (Requirement 2.23) — response GET /login SHALL mengandung header 'X-Frame-Options' (filter secureheaders aktif di required['after'] app/Config/Filters.php)."
         );
 
+        $csp = Services::csp();
+
+        self::assertTrue(
+            $csp->enabled(),
+            'EXPECTED BEHAVIOR M1 (Requirement 2.23) — CSP SHALL aktif (Config\\App::$CSPEnabled) agar framework menempelkan header Content-Security-Policy pada setiap respons.'
+        );
+
+        $respon = new Response(config('App'));
+        $csp->finalize($respon);
+
         self::assertNotSame(
             '',
-            $headerXFrameOptions,
-            "BUG CONDITION M1 (Requirement 1.26) — COUNTEREXAMPLE: response GET /login (halaman publik Login::index()) TIDAK mengandung header 'X-Frame-Options' sama sekali (nilai getHeaderLine() kosong), karena filter 'secureheaders' (CodeIgniter\\Filters\\SecureHeaders) masih dikomentari pada \$globals['after'] di app/Config/Filters.php. Ini membuktikan halaman dapat di-embed ke <iframe> milik situs manapun, membuka permukaan serangan clickjacking."
+            $respon->getHeaderLine('Content-Security-Policy'),
+            'EXPECTED BEHAVIOR M1 (Requirement 2.23) — finalize() CSP SHALL menghasilkan header Content-Security-Policy non-kosong; header inilah yang dikirim ke klien pada respons sungguhan.'
         );
     }
 
@@ -160,7 +164,7 @@ final class M1SecurityHeadersExplorationTest extends CIUnitTestCase
      * menuntut `$CSPEnabled === true` (expected/fixed behavior),
      * namun nilai aktual pada kode asli adalah `false`.
      */
-    public function testKonfigurasiCspEnabledMasihFalsePadaKodeAsli(): void
+    public function testKonfigurasiCspAktif(): void
     {
         $konfigurasiApp = config('App');
 

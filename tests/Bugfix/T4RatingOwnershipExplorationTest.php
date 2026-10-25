@@ -5,6 +5,8 @@ namespace Tests\Bugfix;
 use App\Models\ModelTicketing;
 use CodeIgniter\Database\BaseConnection;
 use CodeIgniter\Test\CIUnitTestCase;
+use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
 
 /**
  * Task 6 — Test eksplorasi bug condition T4: `Cektiket::rating()` tanpa
@@ -158,6 +160,8 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
 {
+    use FeatureTestTrait;
+
     /**
      * Tiket NYATA yang ada di database live — dipakai sebagai "nomor
      * tiket yang ditebak/diketahui" oleh penyerang yang TIDAK PERNAH
@@ -220,99 +224,82 @@ final class T4RatingOwnershipExplorationTest extends CIUnitTestCase
     }
 
     /**
-     * Property 1 (Bug Condition) — Bagian 1: RATING TERSIMPAN.
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix T4:
+     * `Cektiket::rating()` SHALL menolak permintaan yang tidak disertai
+     * kunci terenkripsi yang sah, sehingga tiket yang nomornya hanya
+     * ditebak/diketahui TIDAK dapat diberi rating.
      *
-     * Mereplikasi PERSIS urutan operasi produksi yang dieksekusi
-     * `Cektiket::rating()` (Cektiket.php:106-119) — bukan query manual
-     * pengganti — dengan `nomorTiket` = nomor tiket tebakan (TANPA
-     * kunci terenkripsi apa pun yang di-decode untuk memperolehnya):
-     *
-     *   $cek    = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => $nomorTiket]);
-     *   $proses = empty($cek) ? tambah('d_rating', $param) : ubah('d_rating', $param, [...]);
-     *
-     * EXPECTED OUTCOME (task 6): test ini SHALL GAGAL pada kode belum
-     * diperbaiki — yaitu, insert/update d_rating SHALL BERHASIL untuk
-     * nomorTiket yang HANYA ditebak (bukan hasil decode kunci), karena
-     * TIDAK ADA validasi kepemilikan apa pun di titik ini pada kode
-     * saat ini. Assertion di bawah menegaskan bahwa hal tersebut TIDAK
-     * BOLEH terjadi (yaitu, menegaskan expected FIXED behavior) —
-     * sehingga pada kode saat ini (belum diperbaiki), assertion ini
-     * akan GAGAL, membuktikan bug ada.
+     * Diuji lewat dispatch HTTP sungguhan (bukan simulasi urutan operasi
+     * model seperti test lama): POST ke `cektiket/rating/{kunci tidak
+     * valid}` — jalur yang sama persis dengan yang dipakai tautan rating
+     * dari email pemohon.
      */
-    public function testRatingTersimpanUntukTiketTebakanTanpaKunciApapun(): void
+    public function testRatingDenganKunciTidakValidTidakMenyimpanRating(): void
     {
-        $param = [
-            'ratingNilai'     => '5',
-            'ratingTicketId'  => self::NOMOR_TIKET_TEBAKAN,
-        ];
+        $hasil = $this->postRating('KUNCI-TIDAK-VALID', ['rating' => '5']);
 
-        // Urutan operasi IDENTIK dengan Cektiket::rating() — model
-        // produksi sungguhan, parameter sungguhan, database live
-        // sungguhan. Satu-satunya hal yang TIDAK dilakukan adalah
-        // pembungkus HTTP (baca POST, panggil email, exit;) yang tidak
-        // relevan untuk membuktikan side-effect model ini sendiri.
-        $cek    = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => self::NOMOR_TIKET_TEBAKAN]);
-        $proses = empty($cek)
-            ? $this->tiket->tambah('d_rating', $param)
-            : $this->tiket->ubah('d_rating', $param, ['ratingTicketId' => self::NOMOR_TIKET_TEBAKAN]);
-
-        self::assertTrue(
-            $proses,
-            'Prasyarat counterexample: operasi tambah()/ubah() d_rating produksi SHALL berhasil untuk nomorTiket tebakan ini (bukti bahwa Cektiket::rating() SECARA FAKTUAL akan berhasil menyimpan rating bila dipanggil via HTTP dengan nomorTiket ini).'
+        self::assertSame(
+            403,
+            $hasil->response()->getStatusCode(),
+            'EXPECTED BEHAVIOR T4 (Requirement 2.15, 2.16) — kunci yang tidak dapat di-decode SHALL ditolak HTTP 403; rating() tidak boleh melakukan operasi model apa pun sebelum kunci terbukti sah.'
         );
 
-        $baris = $this->koneksi->table('d_rating')
-            ->where(['ratingTicketId' => self::NOMOR_TIKET_TEBAKAN])
-            ->get()->getRowArray();
-
-        self::assertNull(
-            $baris,
+        self::assertSame(
+            0,
+            $this->koneksi->table('d_rating')->where('ratingTicketId', self::NOMOR_TIKET_TEBAKAN)->countAllResults(),
             sprintf(
-                'BUG CONDITION T4 — COUNTEREXAMPLE: rating untuk tiket "%s" TERSIMPAN di d_rating (ratingNilai=%s) MESKIPUN nomorTiket ini HANYA ditebak/diketahui — TIDAK PERNAH ada kunci terenkripsi yang di-decode untuk memvalidasi bahwa pemohon benar-benar memegang link sah tiket tersebut. Cektiket::rating() (app/Controllers/Cektiket.php:106-119) menerima nomorTiket LANGSUNG dari POST body tanpa satu pun panggilan Enkripsi::decode() — siapa pun yang mengetahui format "XXXX-XXXX-NNN" dan menebak/mengetahui nomor tiket nyata dapat memicu operasi ini. Assertion ini SEHARUSNYA lulus (baris null, tidak ada rating tersimpan) HANYA setelah fix T4 (task 9) diterapkan, yaitu ketika rating() mensyaratkan decode kunci sebelum operasi model apa pun.',
-                self::NOMOR_TIKET_TEBAKAN,
-                $baris['ratingNilai'] ?? 'n/a'
+                'EXPECTED BEHAVIOR T4 — TIDAK BOLEH ada baris d_rating untuk tiket "%s" ketika permintaan tidak menyertakan kunci sah: nomor tiket tebakan tidak cukup untuk menilai tiket orang lain.',
+                self::NOMOR_TIKET_TEBAKAN
             )
         );
     }
 
     /**
-     * Property 1 (Bug Condition) — Bagian 2: KONDISI EMAIL TERPICU
-     * TERPENUHI SECARA STRUKTURAL (TANPA memicu pengiriman sungguhan).
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix T4:
+     * nomor tiket yang dikirim pada BODY permintaan SHALL diabaikan —
+     * satu-satunya sumber nomor tiket adalah hasil `decode()` kunci pada
+     * segmen URL.
      *
-     * Cektiket::rating() (Cektiket.php:120-122) memanggil
-     * `$this->email->selesai(...)` bila dan HANYA bila
-     * `$datas = $this->tiket->byId(['ticketTrackingId' => $nomorTiket])`
-     * BUKAN `false`. Memanggil `byId()` PRODUKSI YANG SAMA (bukan query
-     * pengganti) dengan nomorTiket tebakan, PERSIS seperti yang akan
-     * dilakukan rating() pada baris yang sama.
-     *
-     * Lihat docblock kelas untuk penjelasan lengkap mengapa test ini
-     * TIDAK men-dispatch HTTP request sungguhan (yang akan benar-benar
-     * memicu pengiriman ke rizkyfkemala@gmail.com) — pendekatan ini
-     * membuktikan gerbang TRUE secara struktural, yang SECARA LOGIS
-     * cukup untuk menyimpulkan email->selesai() PASTI akan dipanggil
-     * bila method ini dijalankan via HTTP, tanpa perlu benar-benar
-     * mengeksekusi pengiriman untuk membuktikannya.
-     *
-     * EXPECTED OUTCOME (task 6): test ini SHALL GAGAL pada kode belum
-     * diperbaiki — yaitu, gerbang `$datas !== false` SHALL benar-benar
-     * true untuk nomorTiket tebakan (assertion di bawah menegaskan
-     * `$datas` SEHARUSNYA false/gerbang tertutup, yang HANYA benar
-     * setelah fix T4).
+     * Ini adalah inti perbaikan T4: sebelum fix, `rating()` membaca
+     * nomor tiket langsung dari input sehingga siapa pun yang menebak
+     * nomor tiket nyata dapat menilai tiket tersebut. Test ini mengirim
+     * nomor tiket NYATA (yang benar-benar ada di d_ticketing) pada body
+     * bersama kunci tidak valid — dan menuntut TIDAK ADA efek apa pun.
      */
-    public function testKondisiPengirimanEmailSelesaiTerpenuhiUntukTiketTebakan(): void
+    public function testRatingMengabaikanNomorTiketYangDikirimDariBody(): void
     {
-        // Panggilan PRODUKSI langsung — persis Cektiket.php baris:
-        // `$datas = $this->tiket->byId(['ticketTrackingId' => $nomorTiket]);`
-        $datas = $this->tiket->byId(['ticketTrackingId' => self::NOMOR_TIKET_TEBAKAN]);
+        $hasil = $this->postRating('KUNCI-TIDAK-VALID', [
+            'rating'     => '5',
+            'nomorTiket' => self::NOMOR_TIKET_TEBAKAN,
+        ]);
 
-        self::assertFalse(
-            $datas,
+        self::assertSame(
+            403,
+            $hasil->response()->getStatusCode(),
+            'EXPECTED BEHAVIOR T4 (Requirement 2.15) — nomorTiket dari body TIDAK BOLEH membuat permintaan tanpa kunci sah menjadi diproses.'
+        );
+
+        self::assertSame(
+            0,
+            $this->koneksi->table('d_rating')->where('ratingTicketId', self::NOMOR_TIKET_TEBAKAN)->countAllResults(),
             sprintf(
-                'BUG CONDITION T4 — COUNTEREXAMPLE: byId() PRODUKSI mengembalikan baris NYATA (bukan false) untuk nomorTiket tebakan "%s" — artinya gerbang `if ($datas !== false)` di Cektiket::rating() (Cektiket.php:120) PASTI true, sehingga `$this->email->selesai((string) $datas[\'ticketEmail\'], ..., $datas, $lampiran)` PASTI akan dipanggil dengan ticketEmail="%s" bila method ini dijalankan via HTTP dengan nomorTiket ini — TANPA penyerang pernah memegang/mendekode kunci terenkripsi apa pun untuk tiket tersebut. Assertion ini SEHARUSNYA lulus (byId() false, gerbang tertutup) HANYA setelah fix T4 (task 9) diterapkan, yaitu ketika rating() mensyaratkan decode kunci dan HANYA memakai nomorTiket hasil decode (bukan POST mentah) pada panggilan byId() ini.',
-                self::NOMOR_TIKET_TEBAKAN,
-                is_array($datas) ? (string) ($datas['ticketEmail'] ?? 'n/a') : 'n/a'
+                'EXPECTED BEHAVIOR T4 — nomor tiket "%s" yang dikirim pada BODY SHALL diabaikan sepenuhnya: rating hanya boleh diproses untuk nomor tiket hasil decode() kunci pada URL.',
+                self::NOMOR_TIKET_TEBAKAN
             )
         );
+    }
+
+    /**
+     * Dispatch POST `cektiket/rating/{kunci}` lengkap dengan token CSRF
+     * (rute ini POST dan dilindungi filter csrf global).
+     *
+     * @param array<string, string> $body
+     */
+    private function postRating(string $kunci, array $body): \CodeIgniter\Test\TestResponse
+    {
+        Services::injectMock('request', $this->setupRequest('POST', 'cektiket/rating/' . $kunci));
+        Services::resetSingle('security');
+
+        return $this->post('cektiket/rating/' . $kunci, array_merge($body, [csrf_token() => csrf_hash()]));
     }
 }

@@ -5,7 +5,10 @@ namespace Tests\Bugfix;
 use App\Models\ModelMaster;
 use App\Models\ModelTicketing;
 use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\HTTP\Exceptions\BadRequestException;
 use CodeIgniter\Test\CIUnitTestCase;
+use CodeIgniter\Test\FeatureTestTrait;
+use Config\Services;
 
 /**
  * Task 1 (Klaster 1 — K1): Test EKSPLORASI bug condition SQL Injection
@@ -28,6 +31,8 @@ use CodeIgniter\Test\CIUnitTestCase;
  */
 final class K1SqlInjectionExplorationTest extends CIUnitTestCase
 {
+    use FeatureTestTrait;
+
     private BaseConnection $koneksi;
 
     private ModelTicketing $tiket;
@@ -67,269 +72,165 @@ final class K1SqlInjectionExplorationTest extends CIUnitTestCase
     }
 
     /**
-     * Property 1 (Bug Condition) — Cektiket::rating() line ~117:
-     * $this->tiket->byId("ticketTrackingId = '" . $nomorTiket . "'")
+     * Property 2 (Preservation/Expected Behavior) — SETELAH fix K1:
+     * `Cektiket::rating()` SHALL memperlakukan kunci pada URL sebagai
+     * nilai LITERAL dan menolak payload SQLi — tanpa menyentuh data.
      *
-     * Payload tautologi SQLi pada nomorTiket HARUS diperlakukan sebagai
-     * nomor tiket tidak valid (0 baris cocok) pada kode yang sudah benar.
-     * Pada kode BELUM diperbaiki, payload ini dirakit sebagai fragmen SQL
-     * mentah sehingga klausa WHERE menjadi tautologi dan mencocokkan
-     * SELURUH tabel d_ticketing.
-     *
-     * EXPECTED OUTCOME saat ini (kode belum diperbaiki): test ini GAGAL.
+     * Diuji lewat dispatch HTTP sungguhan ke rute `cektiket/rating/(:any)`.
+     * Inilah properti yang diperbaiki K1: nilai yang berasal dari request
+     * TIDAK PERNAH lagi dirakit menjadi fragmen SQL.
      */
-    public function testRatingByIdRawStringConditionIsVulnerableToSqlInjection(): void
+    public function testRatingMenolakPayloadSqliTanpaMenyentuhData(): void
     {
-        $payloadSqli = "X' OR '1'='1";
+        $payload = "X' OR '1'='1";
 
-        // Mereproduksi PERSIS pemanggilan pada Cektiket::rating()
-        // (app/Controllers/Cektiket.php:112): kondisi string terkonkatenasi
-        // langsung dari input request, dilempar ke byId().
-        $kondisiMentahSepertiKodeAsli = "ticketTrackingId = '" . $payloadSqli . "'";
+        // Dua lapis pertahanan yang sama-sama sah: (a) filter karakter URI
+        // CodeIgniter menolak payload dengan tanda kutip SEBELUM router
+        // memprosesnya (BadRequestException), atau (b) payload lolos ke
+        // controller dan ditolak sebagai kunci tidak valid (403). Keduanya
+        // berarti payload TIDAK pernah diperlakukan sebagai fragmen SQL.
+        $status = null;
 
-        // Ukur dampak nyata memakai builder yang setara dengan yang dipakai
-        // byId() (tanpa join berat, agar terukur & tidak menghabiskan memori) —
-        // ini adalah fragmen WHERE YANG SAMA yang diteruskan byId() ke
-        // $this->koneksi->table($this->table)->where($kondisi).
-        $jumlahBarisTercocok = $this->koneksi->table('d_ticketing')
-            ->where($kondisiMentahSepertiKodeAsli, null, false)
-            ->countAllResults();
+        try {
+            $status = $this->postRating($payload, ['rating' => '5'])->response()->getStatusCode();
+        } catch (BadRequestException $e) {
+            $status = 400;
+        }
 
-        // Bandingkan dengan hasil AMAN (array binding) untuk payload IDENTIK —
-        // ini adalah expected/fixed behavior (Property 1: Expected Behavior,
-        // akan dipakai ulang pada task 3.3 untuk verifikasi fix).
-        $jumlahBarisAman = $this->koneksi->table('d_ticketing')
-            ->where(['ticketTrackingId' => $payloadSqli])
-            ->countAllResults();
+        self::assertContains(
+            $status,
+            [400, 403],
+            'EXPECTED BEHAVIOR K1 (Requirement 2.1, 2.2) — payload SQLi pada kunci rating SHALL ditolak: 400 oleh filter karakter URI, atau 403 oleh controller (kunci tidak valid).'
+        );
 
-        // Sanity: array binding untuk payload SQLi yang tidak match apa pun
-        // SHALL selalu 0 baris (perilaku aman, tidak boleh berubah oleh fix).
-        self::assertSame(0, $jumlahBarisAman, 'Kondisi array binding SHALL memperlakukan payload SQLi sebagai literal string dan tidak mencocokkan baris apa pun.');
-
-        // *** ASSERTION UTAMA — INI YANG DIHARAPKAN GAGAL PADA KODE ASLI ***
-        // Expected/fixed behavior: kondisi string mentah SEHARUSNYA juga
-        // hanya mencocokkan 0 baris (identik dengan array binding), BUKAN
-        // seluruh tabel. Pada kode asli (belum diperbaiki), $jumlahBarisTercocok
-        // akan sama dengan total baris d_ticketing (~38441), sehingga assertion
-        // berikut GAGAL — ini adalah counterexample yang membuktikan bug ada.
         self::assertSame(
             0,
-            $jumlahBarisTercocok,
-            sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI: kondisi WHERE string mentah "%s" (persis seperti Cektiket::rating() baris ~112) mengembalikan %d baris alih-alih 0 — payload SQLi diperlakukan sebagai fragmen SQL, bukan literal. Total baris d_ticketing = %d.',
-                $kondisiMentahSepertiKodeAsli,
-                $jumlahBarisTercocok,
-                $this->koneksi->table('d_ticketing')->countAllResults()
-            )
+            $this->koneksi->table('d_rating')->where('ratingTicketId', $payload)->countAllResults(),
+            'EXPECTED BEHAVIOR K1 — tidak boleh ada baris d_rating untuk payload SQLi: perintah tidak pernah sampai ke lapisan model.'
         );
     }
 
     /**
-     * Property 1 (Bug Condition) — Reproduksi END-TO-END memanggil method
-     * Model NYATA `ModelTicketing::byId()` (bukan builder manual) dengan
-     * signature string, PERSIS seperti dipanggil dari
-     * Cektiket::rating(): $this->tiket->byId("ticketTrackingId = '...'").
+     * Property 3 (Preservation, struktural) — SELURUH titik panggilan
+     * produksi yang dulu merakit kondisi WHERE dari input request SHALL
+     * memakai bentuk ARRAY BINDING.
      *
-     * byId() melakukan banyak LEFT JOIN sehingga getRowArray() hanya
-     * mengembalikan baris PERTAMA dari hasil yang tercocok — namun baris
-     * pertama tersebut BUKAN tiket yang diminta (nomor tiket palsu/tidak
-     * ada), melainkan tiket ACAK APAPUN yang urutannya pertama di tabel.
-     * Ini membuktikan query tidak melakukan exact-match sama sekali.
+     * Bentuk string mentah pada `ModelMaster::getByLastId()`/`byId()`
+     * SENGAJA tetap didukung untuk caller internal yang tidak meneruskan
+     * input pengguna (lihat docblock `getByLastId()`), sehingga yang
+     * benar-benar harus dijaga adalah TITIK PANGGILANNYA — itulah yang
+     * diperiksa test ini, bukan kemampuan query builder-nya.
      */
-    public function testRatingByIdReturnsArbitraryUnrelatedTicketForSqliPayload(): void
+    public function testSeluruhTitikPanggilanProduksiMemakaiArrayBinding(): void
     {
-        $payloadSqli = "X' OR '1'='1";
+        $titikPanggilan = [
+            'Cektiket::rating()'   => APPPATH . 'Controllers/Cektiket.php',
+            'Login::savetiket()'   => APPPATH . 'Controllers/Login.php',
+            'Ticketing::loadpdf()' => APPPATH . 'Controllers/Ticketing.php',
+        ];
 
-        // Pastikan dulu payload ini BUKAN nomor tiket yang benar-benar ada
-        // (exact match) — memakai jalur AMAN (array) untuk verifikasi ini
-        // supaya sanity check-nya sendiri tidak rentan SQLi.
-        $benarBenarTidakAda = $this->tiket->byId(['ticketTrackingId' => $payloadSqli]);
-        self::assertFalse($benarBenarTidakAda, 'Payload SQLi tidak boleh cocok exact-match apa pun (sanity check jalur aman).');
+        foreach ($titikPanggilan as $nama => $path) {
+            self::assertFileExists($path, sprintf('Prasyarat test: %s SHALL ada.', $path));
 
-        // *** Panggilan PERSIS seperti Cektiket::rating() baris ~112 ***
-        $hasil = $this->tiket->byId("ticketTrackingId = '" . $payloadSqli . "'");
+            $isi = (string) file_get_contents($path);
 
-        // EXPECTED/FIXED behavior: method yang sudah diperbaiki SHALL
-        // mengembalikan `false` (tidak ada baris cocok) untuk nomor tiket
-        // yang tidak valid — sama seperti hasil array binding di atas.
-        //
-        // *** INI YANG DIHARAPKAN GAGAL PADA KODE ASLI ***
-        // Pada kode asli, klausa WHERE menjadi tautologi sehingga query
-        // mencocokkan seluruh tabel dan getRowArray() mengembalikan baris
-        // PERTAMA APAPUN (bukan false, dan bukan tiket dengan nomor sesuai
-        // payload) — assertion berikut gagal, membuktikan bug.
-        self::assertFalse(
-            $hasil,
-            sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI: Cektiket::rating() memanggil byId() dengan kondisi string mentah dan mendapatkan baris tiket "%s" yang SAMA SEKALI TIDAK BERHUBUNGAN dengan payload SQLi yang dikirim — membuktikan tautologi WHERE mencocokkan seluruh tabel d_ticketing, bukan 0 baris seperti seharusnya.',
-                is_array($hasil) ? ($hasil['ticketTrackingId'] ?? '(unknown)') : ''
-            )
-        );
+            foreach (["byId(\"ticketTrackingId = '", "byId('ticketTrackingId = '"] as $polaTerlarang) {
+                self::assertStringNotContainsString(
+                    $polaTerlarang,
+                    $isi,
+                    sprintf(
+                        'EXPECTED BEHAVIOR K1 (Requirement 2.1, 2.3) — %s TIDAK BOLEH lagi merakit kondisi WHERE dari input request (pola "%s"); gunakan array binding.',
+                        $nama,
+                        $polaTerlarang
+                    )
+                );
+            }
+
+            self::assertStringContainsString(
+                "byId(['ticketTrackingId' =>",
+                $isi,
+                sprintf('EXPECTED BEHAVIOR K1 — %s SHALL memakai array binding untuk mengakses tiket.', $nama)
+            );
+        }
     }
 
     /**
-     * Property 1 (Bug Condition) — Cektiket::rating() line ~119:
-     * $this->tiket->ambilSatu('d_archive', "archiveTrackingId = '" . $nomorTiket . "' AND (archiveJenis = 'OUTPUT' or archiveJenis = 'TTD')")
+     * Property 2 (Preservation/Expected Behavior) — `eult_auto_increment()`
+     * dengan bentuk ARRAY (jalur yang dipakai produksi sekarang)
+     * memperlakukan payload SQLi sebagai LITERAL: karena tidak ada baris
+     * dengan `archiveTrackingId` sama dengan payload, MAX(archiveId)
+     * kosong dan fungsi SHALL mengembalikan id pertama `{nip}0001`.
      *
-     * Payload SQLi harus tetap menghasilkan 0 baris cocok pada tabel
-     * d_archive untuk nomor tiket yang tidak ada — pada kode asli,
-     * tautologi menyebabkan query mencocokkan ribuan baris archive
-     * milik tiket-tiket LAIN.
+     * Sebelum fix, pemanggil merakit kondisi string mentah sehingga MAX()
+     * dihitung atas SELURUH tabel d_archive dan menghasilkan id yang salah.
      */
-    public function testRatingArchiveLookupRawStringConditionIsVulnerableToSqlInjection(): void
+    public function testAutoIncrementArrayBindingMemperlakukanPayloadSqliSebagaiLiteral(): void
     {
-        $payloadSqli = "X' OR '1'='1";
+        $arsipId = 'K1UJICOBASQLI';
+        $payload = "X' OR '1'='1";
 
-        // *** Panggilan PERSIS seperti Cektiket::rating() baris ~119 ***
-        $kondisiMentahSepertiKodeAsli = "archiveTrackingId = '" . $payloadSqli . "' AND (archiveJenis = 'OUTPUT' or archiveJenis = 'TTD')";
+        $id = eult_auto_increment('d_archive', 'archiveId', $arsipId, ['archiveTrackingId' => $payload]);
 
-        $jumlahBarisTercocok = $this->koneksi->table('d_archive')
-            ->where($kondisiMentahSepertiKodeAsli, null, false)
-            ->countAllResults();
-
-        // *** ASSERTION UTAMA — INI YANG DIHARAPKAN GAGAL PADA KODE ASLI ***
-        // Expected/fixed behavior: 0 baris (payload tidak match tracking ID apa pun).
         self::assertSame(
-            0,
-            $jumlahBarisTercocok,
+            $arsipId . '0001',
+            $id,
+            'EXPECTED BEHAVIOR K1 (Requirement 2.3) — dengan array binding, payload SQLi tidak mencocokkan baris mana pun sehingga MAX(archiveId) kosong dan id pertama yang dialokasikan adalah {nip}0001.'
+        );
+
+        // Model langsung: MAX(archiveId) untuk kondisi array binding dengan
+        // payload ini SHALL kosong (NULL), bukan MAX seluruh tabel.
+        $barisMaks = $this->master->getByLastId('d_archive', 'archiveId', ['archiveTrackingId' => $payload]);
+
+        self::assertTrue(
+            $barisMaks === false || ($barisMaks['archiveId'] ?? null) === null,
             sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI: ambilSatu("d_archive", ...) dengan kondisi string mentah "%s" (persis seperti Cektiket::rating() baris ~119) mengembalikan %d baris arsip milik tiket LAIN alih-alih 0 baris.',
-                $kondisiMentahSepertiKodeAsli,
-                $jumlahBarisTercocok
+                'EXPECTED BEHAVIOR K1 — getByLastId() dengan array binding SHALL tidak menemukan baris untuk payload SQLi (MAX kosong), bukan menghitung MAX seluruh tabel d_archive. Hasil aktual: %s',
+                json_encode($barisMaks)
             )
         );
     }
 
     /**
-     * Property 1 (Bug Condition) — Login::savetiket() line ~128:
-     * eult_auto_increment('d_archive', 'archiveId', $arsipId, "archiveTrackingId='" . $idTiket . "'")
-     * -> ModelMaster::getByLastId($tabel, $kolom, $kondisi) -> ->where($kondisi)
+     * Property-Based sanity — domain besar metacharacter SQL/unicode/
+     * kosong.
      *
-     * eult_auto_increment() SHALL menghitung MAX(archiveId) HANYA di
-     * antara baris yang benar-benar memiliki archiveTrackingId sama
-     * dengan $idTiket yang diberikan. Pada kode asli, payload SQLi pada
-     * $idTiket membuat MAX() dihitung di seluruh tabel d_archive
-     * (milik tiket manapun), menghasilkan archiveId yang salah/collision.
-     */
-    public function testLoginSavetiketAutoIncrementRawStringConditionIsVulnerableToSqlInjection(): void
-    {
-        $arsipIdUjiCoba  = 'K1UJICOBASQLI';
-        $payloadIdTiket  = "X' OR '1'='1";
-
-        // *** Panggilan PERSIS seperti Login::savetiket() baris ~128 ***
-        $kondisiMentahSepertiKodeAsli = "archiveTrackingId='" . $payloadIdTiket . "'";
-        $idHasilInjeksi = eult_auto_increment('d_archive', 'archiveId', $arsipIdUjiCoba, $kondisiMentahSepertiKodeAsli);
-
-        // Baseline aman: MAX(archiveId) untuk archiveTrackingId yang benar-benar
-        // sama dengan payload (exact match) — karena payload SQLi ini dijamin
-        // tidak ada di d_archive sebagai trackingId literal, hasilnya SHALL
-        // kosong sehingga eult_auto_increment() (bila memakai kondisi array)
-        // akan fallback ke id awal ("{nip}0001").
-        $idAmanEkspektasi = $arsipIdUjiCoba . '0001';
-
-        // *** ASSERTION UTAMA — INI YANG DIHARAPKAN GAGAL PADA KODE ASLI ***
-        // Expected/fixed behavior: karena tidak ada baris d_archive dengan
-        // archiveTrackingId literal sama dengan payload SQLi, MAX() SHALL
-        // kosong dan hasilnya SHALL "{arsipId}0001" (id pertama), BUKAN id
-        // yang diturunkan dari MAX(archiveId) milik tiket lain manapun.
-        self::assertSame(
-            $idAmanEkspektasi,
-            $idHasilInjeksi,
-            sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI: eult_auto_increment() dengan kondisi string mentah "%s" (persis seperti Login::savetiket() baris ~128 -> getByLastId()) menghasilkan archiveId "%s" yang diturunkan dari MAX(archiveId) SELURUH tabel d_archive (bukan hanya milik idTiket yang diminta), alih-alih "%s" yang seharusnya didapat jika tidak ada baris cocok.',
-                $kondisiMentahSepertiKodeAsli,
-                $idHasilInjeksi,
-                $idAmanEkspektasi
-            )
-        );
-    }
-
-    /**
-     * Property 1 (Bug Condition) — Login::savetiket() line ~168 (readback):
-     * $this->tiket->byId("ticketTrackingId = '" . $idTiket . "'")
+     * **Validates: Requirements 2.1, 2.2, 2.3**
      *
-     * Sama seperti testRatingByIdReturnsArbitraryUnrelatedTicketForSqliPayload,
-     * namun mereproduksi titik pemanggilan readback pasca-insert di
-     * Login::savetiket() (risiko lebih rendah karena $idTiket dihasilkan
-     * server-side, namun pola tidak konsisten dan harus diseragamkan —
-     * bugfix.md 1.4).
-     */
-    public function testLoginSavetiketReadbackByIdRawStringConditionIsVulnerableToSqlInjection(): void
-    {
-        // Mensimulasikan skenario di mana $idTiket yang dipakai readback
-        // mengandung metacharacter SQL (misal karena format kode berubah
-        // atau ada input yang lolos ke variabel ini secara tidak terduga —
-        // bugfix.md mencatat pola ini WAJIB diseragamkan meski risikonya
-        // lebih rendah dari 1.1-1.3).
-        $idTiketDenganMetacharacter = "X' OR '1'='1";
-
-        // *** Panggilan PERSIS seperti Login::savetiket() baris ~168 ***
-        $hasil = $this->tiket->byId("ticketTrackingId = '" . $idTiketDenganMetacharacter . "'");
-
-        // *** ASSERTION UTAMA — INI YANG DIHARAPKAN GAGAL PADA KODE ASLI ***
-        self::assertFalse(
-            $hasil,
-            sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI: readback byId() pasca-insert (Login::savetiket() baris ~168) dengan kondisi string mentah mengembalikan baris tiket "%s" yang tidak berhubungan dengan idTiket yang dicari, membuktikan pola string-mentah tidak konsisten/aman di titik ini juga.',
-                is_array($hasil) ? ($hasil['ticketTrackingId'] ?? '(unknown)') : ''
-            )
-        );
-    }
-
-    /**
-     * Property-Based sanity — domain besar metacharacter SQL/unicode/kosong.
+     * Bug ini cocok PBT domain besar (design.md Testing Strategy: "K1:
+     * string SQLi arbitrer"). Karena PHP/PHPUnit di proyek ini TIDAK
+     * memiliki dependency PBT khusus, scoped-PBT diimplementasikan
+     * sebagai data provider berisi korpus representatif metacharacter
+     * SQL, unicode, dan string kosong — dijalankan terhadap query builder
+     * NYATA untuk SETIAP payload.
      *
-     * **Validates: Requirements 1.1, 1.2**
-     *
-     * Bug ini cocok PBT domain besar (design.md Testing Strategy: "K1: string
-     * SQLi arbitrer"). Karena PHP/PHPUnit di proyek ini TIDAK memiliki
-     * dependency PBT khusus (tidak ada di composer.json: tidak ada
-     * eris/generator, giorgiosironi/eris, dsb), scoped-PBT diimplementasikan
-     * sebagai data provider berisi korpus representatif metacharacter SQL,
-     * unicode, dan string kosong — dijalankan terhadap query builder NYATA
-     * untuk setiap payload, mengonfirmasi bug condition berlaku merata di
-     * seluruh domain (bukan hanya satu payload tautologi).
+     * Oracle dihitung di sisi PHP (independen dari query builder): berapa
+     * baris yang `ticketTrackingId`-nya SAMA PERSIS (literal) dengan
+     * payload. Bentuk ARRAY BINDING — satu-satunya bentuk yang dipakai
+     * produksi setelah fix K1 — SHALL selalu menghasilkan jumlah yang
+     * SAMA dengan oracle tersebut, tidak pernah memicu SQL error, dan
+     * tidak pernah "cocok semua baris".
      *
      * @dataProvider provideSqliMetacharacterPayloads
      */
-    public function testRawStringConditionVulnerableAcrossSqlMetacharacterDomain(string $payload, string $keterangan): void
+    public function testArrayBindingMemperlakukanSeluruhPayloadMetacharacterSebagaiLiteral(string $payload, string $keterangan): void
     {
-        $kondisiMentah = "ticketTrackingId = '" . $payload . "'";
-
-        // Oracle referensi dihitung di sisi PHP (independen dari query
-        // builder): berapa baris SUNGGUHAN yang ticketTrackingId-nya SAMA
-        // PERSIS (literal) dengan payload. Karena payload berisi
-        // metacharacter SQL, secara faktual TIDAK ADA nomor tiket asli
-        // yang bisa mengandung karakter tersebut (kolom ticketTrackingId
-        // berformat XXXX-XXXX-NNN) — oracle ini SELALU 0 untuk seluruh
-        // payload di korpus (kecuali payload "nomor tiket valid sungguhan").
         $daftarSemuaTrackingId = $this->koneksi->table('d_ticketing')
             ->select('ticketTrackingId')
             ->get()->getResultArray();
+
         $jumlahBarisOracle = count(array_filter(
             $daftarSemuaTrackingId,
             static fn (array $baris): bool => $baris['ticketTrackingId'] === $payload
         ));
 
         try {
-            // Eksekusi LANGSUNG (bukan dibungkus COUNT/derived-table) agar
-            // efek injeksi apa pun (tautologi, UNION, stacked query, dsb)
-            // termanifestasi persis seperti saat byId()/ambilSatu() memanggil
-            // ->get()->getResultArray() pada kode asli — bukan diserap/
-            // disamarkan oleh lapisan agregasi COUNT(*) OVER (subquery).
-            $hasilMentah = $this->koneksi->table('d_ticketing')
+            $hasil = $this->koneksi->table('d_ticketing')
                 ->select('ticketTrackingId')
-                ->where($kondisiMentah, null, false)
+                ->where(['ticketTrackingId' => $payload])
                 ->get()->getResultArray();
         } catch (\Throwable $e) {
-            // SQL error akibat metacharacter juga merupakan bentuk bug
-            // (Expected Behavior: "tidak pernah SQL error akibat metacharacter",
-            // design.md K1 property). Pada kode asli, sebagian payload
-            // (misal berisi `;` atau tanda kutip tak seimbang) memicu error
-            // SQL alih-alih diperlakukan sebagai literal — ini pun
-            // termasuk bukti bug (bukan exception yang diharapkan).
             self::fail(sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI (payload "%s" — %s): kondisi string mentah memicu SQL error (%s) alih-alih diperlakukan sebagai literal string aman.',
+                'EXPECTED BEHAVIOR K1 (payload "%s" — %s): array binding tidak boleh memicu SQL error (%s).',
                 $payload,
                 $keterangan,
                 $e->getMessage()
@@ -338,21 +239,33 @@ final class K1SqlInjectionExplorationTest extends CIUnitTestCase
             return;
         }
 
-        $jumlahBarisMentah = count($hasilMentah);
+        $jumlahBaris = count($hasil);
 
-        // Expected/fixed behavior untuk SETIAP payload di domain ini: hasil
-        // string-mentah SHALL selalu identik dengan oracle exact-match literal.
         self::assertSame(
             $jumlahBarisOracle,
-            $jumlahBarisMentah,
+            $jumlahBaris,
             sprintf(
-                'BUG CONDITION K1 TERKONFIRMASI (payload "%s" — %s): kondisi string mentah menghasilkan %d baris dari eksekusi LANGSUNG (bukan lewat COUNT), berbeda dari oracle exact-match literal (%d baris) untuk payload identik — membuktikan payload tidak diperlakukan sebagai nilai literal.',
+                'EXPECTED BEHAVIOR K1 (payload "%s" — %s): array binding SHALL memperlakukan payload sebagai nilai literal sehingga jumlah baris yang cocok SELALU sama dengan oracle exact-match PHP (%d), bukan %d — selisih ini akan menandakan payload bocor menjadi fragmen SQL.',
                 $payload,
                 $keterangan,
-                $jumlahBarisMentah,
-                $jumlahBarisOracle
+                $jumlahBarisOracle,
+                $jumlahBaris
             )
         );
+    }
+
+    /**
+     * Dispatch POST `cektiket/rating/{kunci}` lengkap dengan token CSRF
+     * (rute POST yang dilindungi filter csrf global).
+     *
+     * @param array<string, string> $body
+     */
+    private function postRating(string $kunci, array $body): \CodeIgniter\Test\TestResponse
+    {
+        Services::injectMock('request', $this->setupRequest('POST', 'cektiket/rating/' . $kunci));
+        Services::resetSingle('security');
+
+        return $this->post('cektiket/rating/' . $kunci, array_merge($body, [csrf_token() => csrf_hash()]));
     }
 
     /**
@@ -370,7 +283,7 @@ final class K1SqlInjectionExplorationTest extends CIUnitTestCase
             'unicode metacharacter'       => ["X'\u{2019} OR \u{2018}1\u{2019}=\u{2018}1", 'unicode quote lookalike + OR'],
             'string kosong'               => ['', 'string kosong sebagai nomorTiket'],
             'hanya quote tunggal'         => ["'", 'quote tunggal tak seimbang'],
-            'nomor tiket valid sungguhan' => ['QEHO-HTTV-001', 'nomor tiket VALID nyata (baseline non-bug, harus tetap 0 vs 0 karena keduanya harus match 1 baris sama)'],
+            'nomor tiket valid sungguhan' => ['QEHO-HTTV-001', 'nomor tiket VALID nyata (baseline non-bug: array binding SHALL tetap mencocokkan tepat 1 baris)'],
         ];
     }
 }

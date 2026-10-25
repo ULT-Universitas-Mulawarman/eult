@@ -394,6 +394,57 @@ final class T2CaptchaRateLimitExplorationTest extends CIUnitTestCase
     }
 
     /**
+     * Preservation: request wajar di dalam limit tetap diproses controller, dan
+     * request ke-6 dalam window yang sama ditolak 429. Captcha SENGAJA salah
+     * sehingga controller menolak sebelum tiket dibuat dan sebelum email
+     * terkirim (Login::savetiket() memeriksa captcha sebelum tambah() dan buat()).
+     */
+    public function testRequestSavetiketDalamLimitTetapDiprosesLaluKeEnamDitolak(): void
+    {
+        $this->bersihkanData();
+        $this->bersihkanCacheThrottle('login/savetiket');
+
+        try {
+            for ($i = 1; $i <= 5; $i++) {
+                $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
+                    ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+                    ->post('login/savetiket', $this->denganTokenCsrf(
+                        'login/savetiket',
+                        array_merge($this->fieldFormSavetiketLengkap($i), ['captcha' => 'SALAH-SENGAJA'])
+                    ));
+
+                self::assertSame(
+                    200,
+                    $hasil->response()->getStatusCode(),
+                    "Request ke-{$i} dalam limit SHALL diproses controller (bukan 429)."
+                );
+            }
+
+            $hasil = $this->withSession(['captcha' => self::CAPTCHA_DIKETAHUI])
+                ->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+                ->post('login/savetiket', $this->denganTokenCsrf(
+                    'login/savetiket',
+                    array_merge($this->fieldFormSavetiketLengkap(6), ['captcha' => 'SALAH-SENGAJA'])
+                ));
+
+            self::assertSame(
+                429,
+                $hasil->response()->getStatusCode(),
+                'Request ke-6 dalam window yang sama SHALL ditolak HTTP 429.'
+            );
+
+            self::assertSame(
+                0,
+                $this->koneksi->table('d_ticketing')->where('ticketEmail', self::EMAIL_AMAN)->countAllResults(),
+                'Captcha salah SHALL tidak membuat tiket, sehingga tidak ada email yang terkirim.'
+            );
+        } finally {
+            $this->bersihkanCacheThrottle('login/savetiket');
+            $this->bersihkanData();
+        }
+    }
+
+    /**
      * Field POST lengkap untuk `login/savetiket` — mengikuti persis
      * pola `T1CsrfExplorationTest::fieldFormLengkapTanpaCsrf()` (gerbang
      * $aturan + FK ticketPriority), dengan ticketSubject/ticketMessage

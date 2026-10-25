@@ -126,7 +126,18 @@ class Enkripsi
             return false;
         }
 
-        $mentah      = $this->kunciMentah($kunci);
+        $mentah = $this->kunciMentah($kunci);
+
+        // Production tanpa EULT_ENCRYPTION_LEGACY_KEY: JANGAN diam-diam
+        // memakai kunci framework (encryption.key) sebagai pengganti —
+        // itu membuat tautan yang TIDAK BISA di-decode kembali oleh
+        // decode() (yang memakai kunci legacy), sehingga cektiket
+        // memantul ke homepage. Gagal eksplisit agar Login::cektiket
+        // menampilkan pesan konfigurasi, bukan redirect buntu.
+        if ($mentah === '') {
+            return false;
+        }
+
         $kunciEnkrip = $this->hkdf($mentah, 'sha512', null, strlen($mentah), 'encryption');
         $kunciHmac   = $this->hkdf($mentah, 'sha512', null, null, 'authentication');
 

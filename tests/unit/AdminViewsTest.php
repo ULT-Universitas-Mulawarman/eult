@@ -270,6 +270,25 @@ class AdminViewsTest extends CIUnitTestCase
         $this->assertStringContainsString('Berkas Dikarantina', $html);
     }
 
+    public function testHakaksesuserViewRendersGroupListWithoutDeadForm(): void
+    {
+        $renderer = service('renderer');
+        $renderer->resetData();
+        $html = $renderer->setData([
+            'page_judul' => 'Hak Akses User',
+            'datas'      => [
+                ['sgroupNama' => 'ADMIN', 'sgroupUnit' => '01', 'sgroupKeterangan' => 'Administrator'],
+            ],
+        ])->render('pages/hakaksesuser/index');
+
+        // Regresi: view lama memakai $show_url/$s_user_group yang tidak pernah
+        // dikirim controller (Undefined variable) dan form tanpa handler JS.
+        $this->assertStringNotContainsString('Undefined variable', $html);
+        $this->assertStringNotContainsString('form_show', $html);
+        $this->assertStringContainsString('ADMIN', $html);
+        $this->assertStringContainsString('Administrator', $html);
+    }
+
     public function testMasterDataViewsUseConsistentPortletStructure(): void
     {
         $renderer = service('renderer');

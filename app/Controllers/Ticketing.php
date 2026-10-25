@@ -816,10 +816,18 @@ class Ticketing extends BaseController
     public function rating()
     {
         $rating = $this->request->getPost('rating');
+
+        // Nilai rating wajib angka 1-5; plugin star-rating mengirim string
+        // desimal ("4.5"). Tolak non-numerik sebelum menyentuh DB agar
+        // kolom float(11,1) tidak menerima sampah.
+        if (! is_numeric($rating) || (float) $rating < 1 || (float) $rating > 5) {
+            eult_message_kirim('Nilai penilaian tidak valid (1-5).', 'error');
+        }
+
         // Nomor tiket dari teks halaman bisa terbawa whitespace markup —
         // pangkas agar cocok eksak dengan ticketTrackingId di database.
         $nomorTiket = $this->tiketMentahTerotorisasi(trim((string) $this->request->getPost('nomorTiket')));
-        $param      = ['ratingNilai' => $rating, 'ratingTicketId' => $nomorTiket];
+        $param      = ['ratingNilai' => (float) $rating, 'ratingTicketId' => $nomorTiket];
 
         $datas = $this->tiket->byId(['ticketTrackingId' => $nomorTiket]);
 
@@ -833,6 +841,13 @@ class Ticketing extends BaseController
             ? $this->tiket->tambah('d_rating', $param)
             : $this->tiket->ubah('d_rating', $param, ['ratingTicketId' => $nomorTiket]);
 
+        if (! $proses) {
+            eult_message_kirim($this->judul . ' Gagal menyimpan penilaian, ' . $this->tiket->pesanGalat('simpan rating'), 'error');
+        }
+
+        // Email berkas adalah efek samping opsional: kegagalannya (SMTP
+        // belum dikonfigurasi, berkas belum ada) TIDAK BOLEH menutupi
+        // fakta bahwa penilaian sudah tersimpan.
         $output = $this->tiket->tabelBuilder('d_archive')
             ->where('archiveTrackingId', $nomorTiket)
             ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
@@ -841,13 +856,11 @@ class Ticketing extends BaseController
 
         $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $nomorTiket, $datas, $lampiran);
 
-        if ($proses) {
-            if ($terkirim) {
-                eult_message_kirim('Terimakasih Telah Mengisi IKM, Untuk layanan dengan permintaan berkas, berkas telah kami kirimkan via email. Mohon Periksa Email Anda.', 'success');
-            }
-
-            eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'error');
+        if ($terkirim) {
+            eult_message_kirim('Terimakasih Telah Mengisi IKM, Untuk layanan dengan permintaan berkas, berkas telah kami kirimkan via email. Mohon Periksa Email Anda.', 'success');
         }
+
+        eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'error');
 
         eult_message_kirim('Rating gagal disimpan.', 'error');
     }

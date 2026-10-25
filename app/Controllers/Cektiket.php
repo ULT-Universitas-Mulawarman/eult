@@ -144,13 +144,22 @@ class Cektiket extends BaseController
         }
 
         $rating = $this->request->getPost('rating');
-        $param  = ['ratingNilai' => $rating, 'ratingTicketId' => $nomorTiket];
+
+        if (! is_numeric($rating) || (float) $rating < 1 || (float) $rating > 5) {
+            eult_message_kirim('Nilai penilaian tidak valid (1-5).', 'error');
+        }
+
+        $param = ['ratingNilai' => (float) $rating, 'ratingTicketId' => $nomorTiket];
 
         $cek = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => $nomorTiket]);
 
         $proses = empty($cek)
             ? $this->tiket->tambah('d_rating', $param)
             : $this->tiket->ubah('d_rating', $param, ['ratingTicketId' => $nomorTiket]);
+
+        if (! $proses) {
+            eult_message_kirim('Gagal menyimpan penilaian, ' . $this->tiket->pesanGalat('simpan rating'), 'error');
+        }
 
         $output = $this->tiket->tabelBuilder('d_archive')
             ->where('archiveTrackingId', $nomorTiket)
@@ -164,7 +173,7 @@ class Cektiket extends BaseController
             $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $nomorTiket, $datas, $lampiran);
         }
 
-        if ($proses) {
+        {
             $this->response->setHeader(csrf_header(), csrf_hash());
 
             if ($terkirim) {

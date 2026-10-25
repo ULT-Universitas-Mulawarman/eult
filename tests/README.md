@@ -47,7 +47,7 @@ More details on a test database setup are in the
 | Suite      | Perintah                                   | Kebutuhan                                            |
 |------------|--------------------------------------------|------------------------------------------------------|
 | `Unit`     | `vendor/bin/phpunit` (default, dipakai CI) | Tidak ada (tanpa MySQL/server)                        |
-| `Database` | `vendor/bin/phpunit --testsuite Database`  | MySQL `db_newtiket` + `db_ult` via `.env` `EULT_DB_*` |
+| `Database` | `vendor/bin/phpunit --testsuite Database`  | MySQL `db_newtiket` + `db_ultunmul` via `.env` `EULT_DB_*`/`EULT_DBULT_*` |
 | `Live`     | `vendor/bin/phpunit --testsuite Live`      | Server dev live / `php -S` subprocess                 |
 
 Catatan suite `Live`: token CSRF harus dibaca dari hidden input `csrf_test_name` pada HTML

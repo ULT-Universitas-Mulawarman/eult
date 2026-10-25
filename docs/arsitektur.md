@@ -11,18 +11,19 @@ Aplikasi memakai dua skema MySQL sekaligus:
 | Skema | Isi | Akses |
 |---|---|---|
 | `db_newtiket` | Data transaksional EULT (`d_ticketing`, `d_disposisi`, `r_surat`, `s_user`, `d_archive`, referensi `r_*`) | Koneksi `default` (Config/Database.php) |
-| `db_ult` | Master layanan kampus (`ref_layanan`, `ref_jenis_layanan`, `ref_unit`) | Koneksi `dbult` **dan** identifier `db_ult.` mentah pada koneksi `default` |
+| `db_ultunmul` | Master layanan kampus (`ref_layanan`, `ref_jenis_layanan`, `ref_unit`) | Koneksi `dbult` **dan** identifier lintas-DB dinamis `<nama DB>.` (ModelMaster::refUlt()) pada koneksi `default` |
 
-Dua jalur akses ke `db_ult` yang ada saat ini:
+Dua jalur akses ke `db_ultunmul` yang ada saat ini:
 
 1. `ModelMaster::dbUlt()` → `Database::connect('dbult')` — dipakai
    `ModelMaster::getLayanan()`.
-2. Identifier `db_ult.ref_*` yang ditulis langsung di join/select pada
-   `ModelTicketing::byId()/dataById()/disposisiById()/disposisiAll()`.
+2. Identifier `<nama DB>.ref_*` yang dibangun dinamis via
+   `ModelMaster::refUlt()`/`dbUltName()` (nama dari `EULT_DBULT_NAME`)
+   pada join/select `ModelTicketing::byId()/dataById()/disposisiById()/disposisiAll()`.
 
 Jalur (2) hanya bekerja karena kedua skema berada di server yang sama
-dengan kredensial yang sama. Bila suatu saat `db_ult` dipindahkan ke
-server lain, seluruh identifier `db_ult.` harus dimigrasi ke koneksi
+dengan kredensial yang sama. Bila suatu saat `db_ultunmul` dipindahkan ke
+server lain, seluruh identifier lintas-DB harus dimigrasi ke koneksi
 `dbult` (atau diganti GRANT lintas-skema) — tidak ada fallback otomatis.
 
 ## Enum Grup Pengguna (susrSgroupNama)
@@ -58,6 +59,6 @@ tertinggi tetap butuh UNIQUE KEY pada `d_ticketing.ticketTrackingId`
 ## Catatan Test
 
 - CI menjalankan suite **Unit** saja (`phpunit.dist.xml`); suite
-  **Database**/**Live** butuh MySQL `db_newtiket`/`db_ult` aktif.
+  **Database**/**Live** butuh MySQL `db_newtiket`/`db_ultunmul` aktif.
 - `phpunit.xml` lokal (tidak di-track) menimpa dist — pastikan suite
   `Unit` tetap didefinisikan di sana (lihat komentar dalam file).

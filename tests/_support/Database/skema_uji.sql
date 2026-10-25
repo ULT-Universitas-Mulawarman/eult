@@ -1,11 +1,11 @@
--- Skema minimal db_newtiket + db_ult untuk suite `Database` di lingkungan
+-- Skema minimal db_newtiket + db_ultunmul untuk suite `Database` di lingkungan
 -- tanpa dump produksi (mis. sandbox/CI). Kolom mengikuti yang dipakai model
 -- dan view; tipe disederhanakan. Jalankan:
 --   mysql < tests/_support/Database/skema_uji.sql
 CREATE DATABASE IF NOT EXISTS db_newtiket CHARACTER SET utf8mb4;
-CREATE DATABASE IF NOT EXISTS db_ult CHARACTER SET utf8mb4;
+CREATE DATABASE IF NOT EXISTS db_ultunmul CHARACTER SET utf8mb4;
 
-USE db_ult;
+USE db_ultunmul;
 CREATE TABLE IF NOT EXISTS ref_unit (
   unitId INT PRIMARY KEY, unitNama VARCHAR(150), unitUrut INT DEFAULT 0
 );

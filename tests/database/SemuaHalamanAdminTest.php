@@ -25,7 +25,7 @@ use CodeIgniter\Test\FeatureTestTrait;
  * `hakakseslayanan`, dan `hakaksesuser` — perilaku ini setia dengan CI3
  * (`MY_Controller::get_master()` menampilkan `layouts/error_page`).
  *
- * Test ini berada di suite `Database` (butuh MySQL db_newtiket + db_ult),
+ * Test ini berada di suite `Database` (butuh MySQL db_newtiket + db_ultunmul),
  * bukan `Unit`, mengikuti pemisahan infrastruktur di phpunit.dist.xml.
  */
 final class SemuaHalamanAdminTest extends CIUnitTestCase

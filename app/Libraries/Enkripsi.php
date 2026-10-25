@@ -32,17 +32,8 @@ class Enkripsi
         $dariEnv = function_exists('env') ? env('EULT_ENCRYPTION_LEGACY_KEY') : null;
         $dariEnv = (is_string($dariEnv) && $dariEnv !== '') ? $dariEnv : null;
 
-        if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
-            if ($dariEnv === null) {
-                // Kunci production tidak terisi — JANGAN kembalikan fallback
-                // hardcode. Kembalikan string kosong agar caller (encode()/
-                // decodeDenganKunci()) menolak operasi secara eksplisit
-                // alih-alih diam-diam memakai kunci publik yang ter-commit
-                // di git.
-                return '';
-            }
-
-            if ($dariEnv === self::FALLBACK_HARDCODE_LEGACY) {
+        if ($dariEnv !== null) {
+            if (defined('ENVIRONMENT') && ENVIRONMENT === 'production' && $dariEnv === self::FALLBACK_HARDCODE_LEGACY) {
                 // Kunci production TERISI namun masih identik nilai default
                 // lama — defense-in-depth: catat peringatan kritis, TETAP
                 // pakai nilai tersebut untuk sesi berjalan ini (tidak
@@ -56,10 +47,31 @@ class Enkripsi
             return $dariEnv;
         }
 
+        // EULT_ENCRYPTION_LEGACY_KEY tidak terisi: pakai kunci framework
+        // (encryption.key, format hex2bin:) yang SUDAH ADA di .env agar
+        // encode/decode tetap konsisten satu sama lain tanpa konfigurasi
+        // tambahan. Kunci framework 32 byte (AES-256) sehingga setara
+        // kuat dengan kunci legacy acak.
+        $kunciFramework = function_exists('env') ? env('encryption.key') : null;
+        if (is_string($kunciFramework) && str_starts_with($kunciFramework, 'hex2bin:')) {
+            $biner = hex2bin(substr($kunciFramework, 8));
+            if (is_string($biner) && $biner !== '') {
+                return $biner;
+            }
+        }
+
+        if (defined('ENVIRONMENT') && ENVIRONMENT === 'production') {
+            // Tidak ada kunci apa pun yang bisa dipakai — kembalikan string
+            // kosong agar caller (encode()/decodeDenganKunci()) menolak
+            // operasi secara eksplisit alih-alih memakai kunci publik
+            // yang ter-commit di git.
+            return '';
+        }
+
         // Development/testing: perilaku existing dipertahankan persis —
-        // kunci dari .env jika terisi, jika tidak fallback hardcode legacy
-        // TANPA log/warning apa pun (agar workflow lokal tidak terganggu).
-        return $dariEnv ?? self::FALLBACK_HARDCODE_LEGACY;
+        // fallback hardcode legacy TANPA log/warning apa pun (agar workflow
+        // lokal tidak terganggu).
+        return self::FALLBACK_HARDCODE_LEGACY;
     }
 
     public function safeB64Encode(string $string): string
@@ -166,18 +178,11 @@ class Enkripsi
             return false;
         }
 
-        // Coba kunci eksplisit/legacy dulu, lalu kunci .env (format hex2bin:) untuk migrasi.
+        // Kunci efektif tunggal (kunciLegacy sudah menangani fallback
+        // encryption.key bila EULT_ENCRYPTION_LEGACY_KEY kosong), plus
+        // kunci eksplisit bila diberikan. Tidak ada lagi jalur ganda
+        // yang bisa membuat encode/decode memakai kunci berbeda.
         $kandidat = [$this->kunciMentah($kunci)];
-
-        $dariEnv = function_exists('env') ? (string) (env('encryption.key') ?? '') : '';
-        if (str_starts_with($dariEnv, 'hex2bin:')) {
-            $biner = hex2bin(substr($dariEnv, 8));
-            if (is_string($biner) && $biner !== '') {
-                $kandidat[] = $biner;
-            }
-        } elseif ($dariEnv !== '') {
-            $kandidat[] = $dariEnv;
-        }
 
         foreach ($kandidat as $mentah) {
             $hasil = $this->decodeDenganKunci($nilai, $mentah);

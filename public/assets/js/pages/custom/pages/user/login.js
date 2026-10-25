@@ -257,6 +257,13 @@ var KTLoginGeneral = function () {
     });
 
     var handleSignInFormSubmit = function () {
+        // Enter pada field teks memicu submit native, sedangkan endpoint
+        // tujuan mengembalikan JSON yang akan ditampilkan browser mentah.
+        // Alihkan ke jalur AJAX yang sama dengan klik tombol.
+        $('#kt_login_form').off('submit.eultSave').on('submit.eultSave', function (e) {
+            e.preventDefault();
+            $('#kt_signin_submit').trigger('click');
+        });
         $('#kt_signin_submit').click(function (e) {
             e.preventDefault();
             var btn = $(this);
@@ -315,6 +322,11 @@ var KTLoginGeneral = function () {
     }
 
     var handleTrackFormSubmit = function () {
+        // Sama dengan form sign-in: Enter tidak boleh jatuh ke submit native.
+        $('#kt_track_form').off('submit.eultSave').on('submit.eultSave', function (e) {
+            e.preventDefault();
+            $('#kt_track_submit').trigger('click');
+        });
         $('#kt_track_submit').click(function (e) {
             e.preventDefault();
             var btn = $(this);
@@ -358,6 +370,11 @@ var KTLoginGeneral = function () {
     }
 
     var handleCreateFormSubmit = function () {
+        // Sama dengan form sign-in: Enter tidak boleh jatuh ke submit native.
+        $('#kt_create_form').off('submit.eultSave').on('submit.eultSave', function (e) {
+            e.preventDefault();
+            $('#kt_create_submit').trigger('click');
+        });
         $('#kt_create_submit').click(function (e) {
             e.preventDefault();
             var btn = $(this);

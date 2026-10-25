@@ -19,6 +19,12 @@ var refKategori = function() {
 		const formShow = KTUtil.getByID('form_show');
 		const handleSave = () => {
 			const formCrud = KTUtil.getByID('form_form');
+			// Enter pada field teks memicu submit native ke endpoint JSON —
+			// alihkan ke jalur klik tombol Save agar tetap lewat AJAX.
+			$(formCrud).off('submit.eultSave').on('submit.eultSave', e => {
+				e.preventDefault();
+				$('#btn_save').trigger('click');
+			});
 			$('#btn_save').on('click', e=>{
 				e.preventDefault();
 				KTApp.block('#form_crud', {

@@ -30,9 +30,12 @@ class Email extends BaseConfig
     public string $mailPath = '/usr/sbin/sendmail';
 
     /**
-     * SMTP Server Hostname
+     * SMTP Server Hostname (tanpa prefix ssl:// atau tls:// — prefix
+     * ditambahkan otomatis oleh CI4 dari SMTPPort/SMTPCrypto; bila host
+     * mengandung prefix, fsockopen menerima "ssl://ssl://..." dan gagal
+     * DNS seperti kasus tiket ODTT-OFOJ-001).
      */
-    public string $SMTPHost = 'ssl://smtp.gmail.com';
+    public string $SMTPHost = 'smtp.gmail.com';
 
     /**
      * Which SMTP authentication method to use: login, plain
@@ -135,11 +138,35 @@ class Email extends BaseConfig
         // Timpa SMTP dari .env (EULT_MAIL_*) agar cukup ganti .env saat pindah server.
         $baca = static fn (string $kunci, string $bawaan = ''): string => ($v = env($kunci)) !== null && $v !== '' ? (string) $v : $bawaan;
 
-        $this->SMTPHost  = $baca('EULT_MAIL_HOST', $this->SMTPHost);
+        $this->SMTPHost  = $this->normalisasiHost($baca('EULT_MAIL_HOST', $this->SMTPHost));
         $this->SMTPPort  = (int) $baca('EULT_MAIL_PORT', (string) $this->SMTPPort);
         $this->SMTPUser  = $baca('EULT_MAIL_USER', $this->SMTPUser);
         $this->SMTPPass  = $baca('EULT_MAIL_PASS', $this->SMTPPass);
         $this->fromEmail = $baca('EULT_MAIL_FROM', $this->fromEmail);
         $this->fromName  = $baca('EULT_MAIL_NAME', $this->fromName);
+
+        if ($this->SMTPPass === '') {
+            log_message('critical', 'EULT email: SMTPPass kosong — isi EULT_MAIL_PASS di .env (App Password Gmail bila memakai smtp.gmail.com). Pengiriman email akan gagal auth.');
+        }
+    }
+
+    /**
+     * Buang prefix ssl:// / tls:// bila operator terlanjur menulisnya di
+     * .env (EULT_MAIL_HOST), karena CI4 menambahkannya sendiri dari
+     * SMTPPort/SMTPCrypto. Tanpa normalisasi, host menjadi
+     * "ssl://ssl://..." dan gagal DNS (kasus tiket ODTT-OFOJ-001).
+     */
+    private function normalisasiHost(string $host): string
+    {
+        $host = trim($host);
+
+        foreach (['ssl://', 'tls://'] as $prefix) {
+            if (str_starts_with(strtolower($host), $prefix)) {
+                $host = substr($host, strlen($prefix));
+                break;
+            }
+        }
+
+        return $host;
     }
 }

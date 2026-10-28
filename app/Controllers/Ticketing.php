@@ -829,7 +829,19 @@ class Ticketing extends BaseController
         // Nomor tiket dari teks halaman bisa terbawa whitespace markup —
         // pangkas agar cocok eksak dengan ticketTrackingId di database.
         $nomorTiket = $this->tiketMentahTerotorisasi(trim((string) $this->request->getPost('nomorTiket')));
-        $param      = ['ratingNilai' => (float) $rating, 'ratingTicketId' => $nomorTiket];
+
+        $keterangan = trim(strip_tags((string) $this->request->getPost('ratingKeterangan')));
+        if (strlen($keterangan) > 500) {
+            $keterangan = mb_substr($keterangan, 0, 500);
+        }
+
+        $param = ['ratingNilai' => (float) $rating, 'ratingTicketId' => $nomorTiket];
+
+        // Kolom ratingKeterangan ditambahkan via migration; sebelum DBA
+        // menjalankannya, rating nilai tetap harus bisa tersimpan.
+        if (in_array('ratingKeterangan', $this->tiket->dbAktif()->getFieldNames('d_rating'), true)) {
+            $param['ratingKeterangan'] = $keterangan;
+        }
 
         $datas = $this->tiket->byId(['ticketTrackingId' => $nomorTiket]);
 
@@ -862,9 +874,9 @@ class Ticketing extends BaseController
             eult_message_kirim('Terimakasih Telah Mengisi IKM, Untuk layanan dengan permintaan berkas, berkas telah kami kirimkan via email. Mohon Periksa Email Anda.', 'success');
         }
 
-        eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'error');
-
-        eult_message_kirim('Rating gagal disimpan.', 'error');
+        // Rating sudah tersimpan di atas; kegagalan email adalah efek
+        // samping dan TIDAK BOLEH dilaporkan sebagai gagal simpan.
+        eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'success');
     }
 
     public function terima(string $kunci = '')

@@ -266,6 +266,11 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                     <div class="mt-3 pt-3" style="border-top: 1px solid #ebedf2;">
                         <label class="text-muted font-weight-bold text-uppercase d-block mb-1" style="font-size: 11px; letter-spacing: 0.5px;">Indeks Kepuasan Pemohon (IKM)</label>
                         <input id="input-id" type="text" class="kv-uni-star rating-loading" value="<?= esc($t->ratingNilai ?? '') ?>" <?= !empty($t->ratingTicketId) ? 'disabled' : '' ?>>
+                        <?php if (empty($t->ratingTicketId)): ?>
+                            <textarea id="ratingKeterangan" class="form-control mt-2" rows="3" maxlength="500" placeholder="Keterangan / umpan balik pemohon (opsional), terisi saat memilih bintang..."></textarea>
+                        <?php elseif (!empty($t->ratingKeterangan)): ?>
+                            <p class="mt-2 mb-0" style="font-size: 12.5px;"><strong>Keterangan pemohon:</strong> <?= esc($t->ratingKeterangan) ?></p>
+                        <?php endif; ?>
                     </div>
                     <?php endif; ?>
                 </div>

@@ -1029,6 +1029,7 @@ const KTTicketing = function () {
                 url: '/ticketing/rating',
                 data: {
                     rating: $(this).val(),
+                    ratingKeterangan: $('#ratingKeterangan').val() || '',
                     nomorTiket: ticketId
                 },
                 success: data => {

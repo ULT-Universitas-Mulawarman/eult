@@ -14,6 +14,7 @@ $statusId     = (int) ($datas['ticketStatus'] ?? 0);
 $statusNama   = (string) ($datas['statusNama'] ?? 'Baru');
 $statusColor  = (string) ($datas['statusColor'] ?? 'brand');
 $ratingNilai  = $datas['ratingNilai'] ?? '';
+$ratingKeterangan = (string) ($datas['ratingKeterangan'] ?? '');
 $sudahRating  = ! empty($datas['ratingTicketId']);
 $outputUrl    = $output_url ?? false;
 $saveUrl      = $save_url ?? site_url('cektiket/save_replies/');
@@ -786,9 +787,14 @@ $labelStatusLive = $selesai ? 'Selesai' : ($ditolak ? 'Tidak dilanjutkan' : 'Dal
                                 <span class="eult-label">Indeks Kepuasan Masyarakat</span>
                                 <input id="input-id" type="text" class="kv-uni-star rating-loading" value="<?= esc((string) $ratingNilai) ?>" <?= $sudahRating ? 'disabled' : '' ?>>
                                 <?php if (! $sudahRating): ?>
+                                    <label class="eult-label mt-2" for="ratingKeterangan">Keterangan / Umpan Balik (opsional)</label>
+                                    <textarea id="ratingKeterangan" class="form-control eult-input" rows="3" maxlength="500" placeholder="Tulis keterangan atau umpan balik Anda (opsional), lalu pilih bintang untuk mengirim..."></textarea>
                                     <span class="eult-ikm-note">Isi penilaian ini agar berkas resmi dikirim ke email Anda. Penilaian tidak dapat diubah setelah terkirim.</span>
                                 <?php else: ?>
                                     <span class="form-text text-muted small mt-2">Terima kasih. Penilaian Anda telah tercatat.</span>
+                                    <?php if ($ratingKeterangan !== ''): ?>
+                                        <p class="eult-value mt-2"><strong>Keterangan Anda:</strong> <?= esc($ratingKeterangan) ?></p>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
@@ -978,7 +984,8 @@ $labelStatusLive = $selesai ? 'Selesai' : ($ditolak ? 'Tidak dilanjutkan' : 'Dal
                             'X-CSRF-TOKEN': $('meta[name="<?= esc(csrf_header(), 'attr') ?>"]').attr('content')
                         },
                         data: {
-                            rating: $(this).val()
+                            rating: $(this).val(),
+                            ratingKeterangan: $('#ratingKeterangan').val() || ''
                         },
                         success: (response, status, xhr) => {
                             // Token CSRF diregenerasi server setiap submit sukses

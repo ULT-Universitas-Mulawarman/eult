@@ -149,7 +149,18 @@ class Cektiket extends BaseController
             eult_message_kirim('Nilai penilaian tidak valid (1-5).', 'error');
         }
 
+        $keterangan = trim(strip_tags((string) $this->request->getPost('ratingKeterangan')));
+        if (strlen($keterangan) > 500) {
+            $keterangan = mb_substr($keterangan, 0, 500);
+        }
+
         $param = ['ratingNilai' => (float) $rating, 'ratingTicketId' => $nomorTiket];
+
+        // Kolom ratingKeterangan ditambahkan via migration; sebelum DBA
+        // menjalankannya, rating nilai tetap harus bisa tersimpan.
+        if (in_array('ratingKeterangan', $this->tiket->dbAktif()->getFieldNames('d_rating'), true)) {
+            $param['ratingKeterangan'] = $keterangan;
+        }
 
         $cek = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => $nomorTiket]);
 
@@ -173,17 +184,15 @@ class Cektiket extends BaseController
             $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $nomorTiket, $datas, $lampiran);
         }
 
-        {
-            $this->response->setHeader(csrf_header(), csrf_hash());
+        $this->response->setHeader(csrf_header(), csrf_hash());
 
-            if ($terkirim) {
-                eult_message_kirim('Terimakasih Telah Mengisi IKM, Untuk layanan dengan permintaan berkas, berkas telah kami kirimkan via email. Mohon Periksa Email Anda.', 'success');
-            }
-
-            eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'error');
+        if ($terkirim) {
+            eult_message_kirim('Terimakasih Telah Mengisi IKM, Untuk layanan dengan permintaan berkas, berkas telah kami kirimkan via email. Mohon Periksa Email Anda.', 'success');
         }
 
-        eult_message_kirim('Rating gagal disimpan.', 'error');
+        // Rating sudah tersimpan di atas; kegagalan email adalah efek
+        // samping dan TIDAK BOLEH dilaporkan sebagai gagal simpan.
+        eult_message_kirim('Penilaian tersimpan, tetapi berkas gagal dikirim via email. Silakan hubungi petugas.', 'success');
     }
 
     public function cetakterima(string $kunci = '')

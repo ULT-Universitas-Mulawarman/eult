@@ -89,6 +89,41 @@ final class RatingNomorTiketTest extends CIUnitTestCase
         }
     }
 
+    public function testRatingEmailGagalTetapDilaporkanSuksesSimpan(): void
+    {
+        // Rating yang sudah tersimpan TIDAK BOLEH dilaporkan gagal hanya
+        // karena email berkas gagal terkirim; JS memeriksa status, jadi
+        // cabang email-gagal wajib memakai status 'success'.
+        foreach (['Ticketing.php', 'Cektiket.php'] as $berkas) {
+            $sumber = (string) file_get_contents(APPPATH . 'Controllers/' . $berkas);
+
+            $this->assertMatchesRegularExpression(
+                "/berkas gagal dikirim via email\.[^']*',\s*'success'/",
+                $sumber,
+                $berkas . ': cabang email-gagal setelah simpan rating harus berstatus success.'
+            );
+        }
+    }
+
+    public function testRatingKeteranganDisimpanDanDikirimKlien(): void
+    {
+        foreach (['Ticketing.php', 'Cektiket.php'] as $berkas) {
+            $sumber = (string) file_get_contents(APPPATH . 'Controllers/' . $berkas);
+
+            $this->assertStringContainsString(
+                "'ratingKeterangan'",
+                $sumber,
+                $berkas . ': keterangan rating harus ikut disimpan ke d_rating.'
+            );
+        }
+
+        $publik = (string) file_get_contents(APPPATH . 'Views/pages/ticketing/detail_user.php');
+        $this->assertStringContainsString('id="ratingKeterangan"', $publik, 'Form IKM publik harus punya field keterangan.');
+
+        $admin = (string) file_get_contents(FCPATH . 'assets/js/pages/custom/pages/ticketing/ticketing.js');
+        $this->assertStringContainsString('ratingKeterangan', $admin, 'JS rating admin harus mengirim ratingKeterangan.');
+    }
+
     public function testPesanSuksesRatingIkutPesanServer(): void
     {
         $publik = (string) file_get_contents(APPPATH . 'Views/pages/ticketing/detail_user.php');

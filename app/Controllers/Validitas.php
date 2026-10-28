@@ -42,6 +42,13 @@ class Validitas extends BaseController
             : false;
 
         if ($datas === false) {
+            // Bedakan kunci rusak (decode gagal) dari tiket yang memang
+            // tidak ada agar kegagalan scan QR bisa didiagnosis dari log.
+            if (! is_string($terbuka) || $terbuka === '') {
+                log_message('warning', 'EULT validitas: decode kunci QR gagal untuk kunci {panjang} karakter', ['panjang' => strlen($kunci)]);
+            } else {
+                log_message('warning', 'EULT validitas: tiket {tiket} hasil decode QR tidak ditemukan', ['tiket' => $terbuka]);
+            }
             $this->response->setStatusCode(404);
         }
 

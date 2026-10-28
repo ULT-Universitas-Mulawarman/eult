@@ -33,6 +33,17 @@ final class EnkripsiTest extends CIUnitTestCase
         $this->assertSame('ABCD-1234-001', $hasil);
     }
 
+    public function testDecodeVektorCi3TanpaKunciEksplisit(): void
+    {
+        // QR cetakan lama memakai kunci legacy CI3; jalur publik
+        // (Validitas::index) memanggil decode() tanpa kunci eksplisit,
+        // jadi token lama harus tetap terbuka agar surat yang sudah
+        // beredar tidak error saat di-scan.
+        $hasil = $this->enkripsi->decode($this->vektorCi3);
+
+        $this->assertSame('ABCD-1234-001', $hasil);
+    }
+
     public function testRoundtripEncodeDecode(): void
     {
         $asli  = 'WXYZ-9999-042';

@@ -19,6 +19,11 @@ namespace App\Libraries;
  * berbeda dari nilai fallback lama) — lihat dokumentasi operasional
  * rotasi kunci K3 untuk detail konsekuensi (seluruh link tiket lama
  * yang dibuat dengan kunci hardcode akan invalid setelah rotasi).
+ *
+ * Pengecualian decode-only: decode() tanpa kunci eksplisit tetap
+ * mencoba kunci historis (termasuk legacy CI3) sebagai kandidat
+ * fallback agar QR/tautan cetakan lama yang sudah beredar tetap bisa
+ * dibuka. Encode TIDAK PERNAH memakai kandidat fallback tersebut.
  */
 class Enkripsi
 {
@@ -178,20 +183,60 @@ class Enkripsi
             return false;
         }
 
-        // Kunci efektif tunggal (kunciLegacy sudah menangani fallback
-        // encryption.key bila EULT_ENCRYPTION_LEGACY_KEY kosong), plus
-        // kunci eksplisit bila diberikan. Tidak ada lagi jalur ganda
-        // yang bisa membuat encode/decode memakai kunci berbeda.
-        $kandidat = [$this->kunciMentah($kunci)];
+        // Kunci eksplisit dari pemanggil dihormati persis (satu kandidat)
+        // agar kontrak lama decode($token, $kunci) tidak berubah.
+        if ($kunci !== '') {
+            return $this->decodeDenganKunci($nilai, $kunci);
+        }
 
-        foreach ($kandidat as $mentah) {
+        // Tanpa kunci eksplisit (jalur publik validitas/cektiket), coba
+        // kunci aktif lalu kunci-kunci historis sebagai fallback
+        // DECODE-ONLY: QR/tautan cetakan lama yang dibuat dengan kunci
+        // legacy CI3 atau encryption.key terdahulu harus tetap terbuka.
+        // Encode TIDAK PERNAH memakai kandidat fallback ini.
+        $utama = $this->kunciLegacy();
+
+        foreach ($this->kandidatKunciDecode($utama) as $mentah) {
             $hasil = $this->decodeDenganKunci($nilai, $mentah);
             if ($hasil !== false) {
+                if ($mentah !== $utama && function_exists('log_message')) {
+                    log_message('warning', 'EULT enkripsi: token lama terbuka via kunci fallback decode-only; pertimbangkan rotasi/reissue QR.');
+                }
+
                 return $hasil;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Daftar kunci kandidat untuk decode tanpa kunci eksplisit:
+     * kunci aktif, kunci framework, lalu kunci legacy CI3. Urutan
+     * menentukan prioritas; duplikat dan string kosong dibuang.
+     *
+     * @return list<string>
+     */
+    private function kandidatKunciDecode(string $utama): array
+    {
+        $kandidat = [$utama];
+
+        $kunciFramework = function_exists('env') ? env('encryption.key') : null;
+        if (is_string($kunciFramework) && str_starts_with($kunciFramework, 'hex2bin:')) {
+            $biner = hex2bin(substr($kunciFramework, 8));
+            if (is_string($biner) && $biner !== '') {
+                $kandidat[] = $biner;
+            }
+        }
+
+        $dariEnv = function_exists('env') ? env('EULT_ENCRYPTION_LEGACY_KEY') : null;
+        if (is_string($dariEnv) && $dariEnv !== '') {
+            $kandidat[] = $dariEnv;
+        }
+
+        $kandidat[] = self::FALLBACK_HARDCODE_LEGACY;
+
+        return array_values(array_unique(array_filter($kandidat, static fn (string $k): bool => $k !== '')));
     }
 
     private function decodeDenganKunci(string $nilai, string $mentah): string|false

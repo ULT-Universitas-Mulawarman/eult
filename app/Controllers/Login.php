@@ -63,7 +63,10 @@ class Login extends BaseController
      */
     private function urlGambarCaptcha(): string
     {
-        return base_url('login/captcha_image') . '?t=' . time();
+        // Nonce acak per panggilan (bukan time() resolusi detik): dua
+        // refresh berurutan dalam detik yang sama TIDAK BOLEH menghasilkan
+        // URL identik yang dilayani cache browser dengan gambar lama.
+        return base_url('login/captcha_image') . '?t=' . time() . bin2hex(random_bytes(4));
     }
 
     /**
@@ -81,6 +84,8 @@ class Login extends BaseController
 
         return $this->response
             ->setHeader('Content-Type', 'image/png')
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
             ->setBody(eult_captcha_image($teks));
     }
 

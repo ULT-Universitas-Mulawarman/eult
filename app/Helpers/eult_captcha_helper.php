@@ -13,9 +13,10 @@ if (! function_exists('eult_captcha_generate')) {
      */
     function eult_captcha_generate(int $panjang = 4): string
     {
-        // Alfabet sama persis dengan CI3 agar perilaku tidak berubah
-        $alfabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';
-        $angka   = range(0, 35);
+        // Alfabet TANPA karakter ambigu (O/0, I/1, S/5, B/8, Z/2, G/6):
+        // pasangan itu penyebab utama captcha terbaca salah oleh pengguna.
+        $alfabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ3479';
+        $angka   = range(0, strlen($alfabet) - 1);
         $hasil   = '';
         shuffle($angka);
         for ($x = 0; $x < $panjang; $x++) {
@@ -61,8 +62,10 @@ if (! function_exists('eult_captcha_image')) {
      */
     function eult_captcha_image(string $teks): string
     {
-        $lebar  = 140;
-        $tinggi = 50;
+        // Canvas diperbesar dari 140x50 agar glyph cukup besar terbaca
+        // di layar desktop maupun mobile tanpa perlu memperbesar halaman.
+        $lebar  = 220;
+        $tinggi = 80;
 
         if (extension_loaded('gd')) {
             return eult_captcha_image_gd($teks, $lebar, $tinggi);
@@ -89,26 +92,36 @@ if (! function_exists('eult_captcha_image_gd')) {
         $latar = imagecolorallocate($gambar, 255, 255, 255);
         imagefill($gambar, 0, 0, $latar);
 
-        // Garis acak sebagai distorsi latar
-        for ($i = 0; $i < 6; $i++) {
-            $warnaGaris = imagecolorallocate($gambar, random_int(120, 200), random_int(120, 200), random_int(120, 200));
+        // Garis acak sebagai distorsi latar (dikurangi agar tidak
+        // memotong keterbacaan huruf).
+        for ($i = 0; $i < 4; $i++) {
+            $warnaGaris = imagecolorallocate($gambar, random_int(140, 200), random_int(140, 200), random_int(140, 200));
             imageline($gambar, random_int(0, $lebar), random_int(0, $tinggi), random_int(0, $lebar), random_int(0, $tinggi), $warnaGaris);
         }
 
-        // Noise titik acak
-        for ($i = 0; $i < 250; $i++) {
-            $warnaNoise = imagecolorallocate($gambar, random_int(150, 220), random_int(150, 220), random_int(150, 220));
+        // Noise titik acak (dikurangi dari 250 agar huruf tetap dominan).
+        for ($i = 0; $i < 120; $i++) {
+            $warnaNoise = imagecolorallocate($gambar, random_int(170, 225), random_int(170, 225), random_int(170, 225));
             imagesetpixel($gambar, random_int(0, $lebar - 1), random_int(0, $tinggi - 1), $warnaNoise);
         }
 
-        $warnaTeks   = imagecolorallocate($gambar, 30, 30, 30);
-        $panjangTeks = strlen($teks);
+        $panjangTeks      = strlen($teks);
         $lebarPerKarakter = (int) floor($lebar / max(1, $panjangTeks));
+        $fontTtf          = function_exists('imagettftext') ? eult_captcha_cari_font_imagick() : null;
 
         for ($i = 0; $i < $panjangTeks; $i++) {
-            $x = 8 + ($i * $lebarPerKarakter) + random_int(-2, 2);
-            $y = random_int(14, 30);
-            imagestring($gambar, 5, $x, $y, $teks[$i], $warnaTeks);
+            // Warna gelap bervariasi per karakter, kontras tetap tinggi.
+            $warnaTeks = imagecolorallocate($gambar, random_int(10, 60), random_int(10, 60), random_int(60, 120));
+
+            if ($fontTtf !== null) {
+                $x = 14 + ($i * $lebarPerKarakter) + random_int(-2, 2);
+                $y = random_int(52, 60);
+                imagettftext($gambar, 34, random_int(-12, 12), $x, $y, $warnaTeks, $fontTtf, $teks[$i]);
+            } else {
+                $x = 14 + ($i * $lebarPerKarakter) + random_int(-2, 2);
+                $y = random_int(28, 40);
+                imagestring($gambar, 5, $x, $y, $teks[$i], $warnaTeks);
+            }
         }
 
         ob_start();
@@ -153,8 +166,8 @@ if (! function_exists('eult_captcha_image_imagick')) {
         }
 
         $gambarGambar->setFillColor(new \ImagickPixel('rgb(30,30,30)'));
-        $gambarGambar->setFontSize(26);
-        $gambarGambar->annotation(10, 34, $teks);
+        $gambarGambar->setFontSize(44);
+        $gambarGambar->annotation(14, 56, $teks);
 
         $gambar->drawImage($gambarGambar);
 

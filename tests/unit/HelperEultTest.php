@@ -19,6 +19,27 @@ final class HelperEultTest extends CIUnitTestCase
         $this->assertFalse(eult_captcha_check('SALAH'));
     }
 
+    public function testCaptchaTanpaKarakterAmbigu(): void
+    {
+        // Karakter yang mudah tertukar (O/0, I/1, S/5, B/8, Z/2) adalah
+        // penyebab utama captcha "sering salah" — tidak boleh muncul.
+        for ($i = 0; $i < 50; $i++) {
+            $kode = eult_captcha_generate(4);
+            $this->assertMatchesRegularExpression('/^[ABCDEFGHJKLMNPQRSTUVWXYZ3479]{4}$/', $kode, 'Captcha di luar alfabet aman: ' . $kode);
+            $this->assertDoesNotMatchRegularExpression('/[OI012568]/', $kode, 'Captcha mengandung karakter ambigu: ' . $kode);
+        }
+    }
+
+    public function testCaptchaGambarLebihBesar(): void
+    {
+        $png  = eult_captcha_image('AB34');
+        $info = getimagesizefromstring($png);
+
+        $this->assertNotFalse($info, 'Captcha harus berupa gambar valid.');
+        $this->assertGreaterThanOrEqual(200, $info[0], 'Lebar captcha minimal 200px agar terbaca.');
+        $this->assertGreaterThanOrEqual(70, $info[1], 'Tinggi captcha minimal 70px agar terbaca.');
+    }
+
     public function testGenerateKodeFormatTiket(): void
     {
         $kode = eult_generate_kode();

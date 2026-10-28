@@ -703,7 +703,9 @@
 
         .captcha-display {
             display: block;
-            height: 50px;
+            height: 72px;
+            width: auto;
+            max-width: 100%;
             font-family: 'Poppins', sans-serif;
             font-size: 1.5rem;
             font-weight: 700;
@@ -1235,7 +1237,7 @@
             }
 
             .captcha-display {
-                height: 44px;
+                height: 60px;
                 font-size: 1.5rem;
                 letter-spacing: 4px;
                 padding: 3px 10px;

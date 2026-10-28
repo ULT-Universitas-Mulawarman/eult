@@ -93,7 +93,7 @@ class Otentifikasi extends BaseController
      */
     private function urlGambarCaptcha(): string
     {
-        return base_url('login/captcha_image') . '?t=' . time();
+        return base_url('login/captcha_image') . '?t=' . time() . bin2hex(random_bytes(4));
     }
 
     /**

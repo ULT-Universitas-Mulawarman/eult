@@ -298,7 +298,7 @@ class Login extends BaseController
 
         // Pemohon umum (NIK tanpa NIM/NIP): kategori layanan publik dibuka,
         // nama diisi manual oleh pemohon karena tidak ada data OSM.
-        if (strlen($id) === 16 && ctype_digit($id)) {
+        if (strlen($id) === 10 && ctype_digit($id)) {
             return $this->response->setJSON([
                 'status' => true,
                 'umum'   => true,

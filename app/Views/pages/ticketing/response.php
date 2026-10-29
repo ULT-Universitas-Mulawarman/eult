@@ -45,7 +45,8 @@
                                         $istrue         = !(($user_group ?? '') === 'ADMIN' || (strpos(($user_group ?? ''), 'OPERATOR') !== false)) ? ($row['disposisiIsTrue'] ?? false) : false;
                                         $suratistrue    = empty($row['ticketSuratCreated']);
                                         $isBottomTop    = ($row['sCatDisposisi'] ?? '') === 'BOTTOMUP';
-                                        $isHome         = !empty($sgroup) ? ((($sgroup->sgroupunitUnitId ?? null) == ($row['ticketAssign'] ?? null) && ($row['disposisiIsTrue'] ?? null) != 1)) : false;
+                                        $homeUnitId     = is_array($sgroup ?? null) ? ($sgroup['sgroupunitUnitId'] ?? null) : ($sgroup->sgroupunitUnitId ?? null);
+                                        $isHome         = !empty($sgroup) ? (($homeUnitId == ($row['ticketAssign'] ?? null) && ($row['disposisiIsTrue'] ?? null) != 1)) : false;
                                         $verified       = (($row['ticketIsVerified'] ?? 0) != 1 && ($row['jenislayananId'] ?? 0) == 2 && ($row['sCatDisposisi'] ?? '') === 'BOTTOMUP' && ($row['statusId'] ?? 0) == 3)
                                             ? '<span class="kt-badge kt-badge--unified-danger kt-badge--inline kt-badge--pill font-weight-bold mt-1">Belum Verifikasi</span>'
                                             : '';

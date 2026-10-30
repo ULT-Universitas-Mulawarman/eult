@@ -1,0 +1,61 @@
+name: Probe Drift
+
+# Audit file di produksi yang TIDAK ada di repo — calon korban rsync --delete.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  drift:
+    name: Audit drift produksi
+    runs-on: [self-hosted, eult]
+    steps:
+      - name: Status git produksi
+        run: |
+          cd /home/eultunmul/apps/eult
+          echo "== HEAD =="
+          git log --oneline -1 2>&1
+          echo "== branch =="
+          git rev-parse --abbrev-ref HEAD 2>&1
+          echo "== untracked (akan TERHAPUS oleh rsync --delete) =="
+          git status --porcelain --untracked-files=all 2>&1 | grep '^??' | head -40 || echo "(tidak ada untracked)"
+          echo "== modified =="
+          git status --porcelain 2>&1 | grep -v '^??' | head -20 || echo "(tidak ada modified)"
+          echo "== ignored files (tidak di-track, tetap bisa terhapus) =="
+          git status --porcelain --ignored --untracked-files=all 2>&1 | grep '^!!' | head -40 || echo "(tidak ada ignored)"
+
+      - name: Isi docs
+        run: |
+          echo "== docs =="
+          ls -la /home/eultunmul/apps/eult/docs 2>&1
+          du -sh /home/eultunmul/apps/eult/docs/* 2>/dev/null | head -10
+
+      - name: Direktori ekstra
+        run: |
+          cd /home/eultunmul/apps/eult
+          for d in .commandcode .hoplite .impeccable .kiro build; do
+            if [ -e "$d" ]; then
+              tracked=$(git ls-files "$d" 2>/dev/null | head -1)
+              if [ -n "$tracked" ]; then echo "$d: TRACKED"; else echo "$d: UNTRACKED (akan terhapus)"; fi
+            fi
+          done
+
+      - name: Simulasi dry-run rsync
+        run: |
+          # Bandingkan workspace runner vs produksi tanpa mengubah apa pun.
+          echo "== file yang akan DIHAPUS rsync --delete =="
+          rsync -a --delete --dry-run --itemize-changes \
+            --exclude='/.git/' --exclude='/.github/' --exclude='/.env' \
+            --exclude='/writable/' --exclude='/build/' --exclude='/node_modules/' \
+            --exclude='/.idea/' --exclude='/.vscode/' --exclude='/phpunit.xml' \
+            --exclude='/.phpunit.cache/' \
+            "$GITHUB_WORKSPACE"/ /home/eultunmul/apps/eult/ 2>&1 \
+            | grep -E '^\*deleting' | head -40 || echo "(tidak ada yang dihapus)"
+          echo "== jumlah =="
+          rsync -a --delete --dry-run --itemize-changes \
+            --exclude='/.git/' --exclude='/.github/' --exclude='/.env' \
+            --exclude='/writable/' --exclude='/build/' --exclude='/node_modules/' \
+            --exclude='/.idea/' --exclude='/.vscode/' --exclude='/phpunit.xml' \
+            --exclude='/.phpunit.cache/' \
+            "$GITHUB_WORKSPACE"/ /home/eultunmul/apps/eult/ 2>&1 \
+            | grep -c '^\*deleting' || echo 0

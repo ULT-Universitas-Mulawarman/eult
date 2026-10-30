@@ -106,6 +106,89 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
         $this->assertSame(10 * 1024 * 1024, eult_upload_max_kb() * 1024, 'Batas server harus sama dengan batas klien.');
     }
 
+    // ------------------------------------------- perbandingan ukuran berkas ---
+
+    /**
+     * Regresi bug 2026-10-30: berkas 5,14 MB ditolak dengan pesan
+     * "melebihi batas 10 MB".
+     *
+     * Penyebab: File::getSizeByUnit('kb') mengembalikan STRING berformat
+     * number_format(), mis. "5,263.00". String berkoma bukan numerik, jadi
+     * PHP membandingkannya sebagai teks: "5,263.00" > 10240 bernilai TRUE
+     * karena '5' > '1'.
+     *
+     * @return array<string, array{int, bool}>
+     */
+    public static function ukuranBerkasProvider(): array
+    {
+        $batasKb = 10 * 1024; // 10 MB
+
+        return [
+            '1 KB'            => [1 * 1024, false],
+            '500 KB'          => [500 * 1024, false],
+            '1 MB'            => [1 * 1024 * 1024, false],
+            '1,5 MB'          => [1536 * 1024, false],
+            '2 MB'            => [2 * 1024 * 1024, false],
+            '5,14 MB (kasus)' => [5263 * 1024, false],
+            '9 MB'            => [9 * 1024 * 1024, false],
+            'tepat 10 MB'     => [$batasKb * 1024, false],
+            '10 MB + 1 byte'  => [$batasKb * 1024 + 1, true],
+            '11 MB'           => [11 * 1024 * 1024, true],
+            '20 MB'           => [20 * 1024 * 1024, true],
+        ];
+    }
+
+    /**
+     * @dataProvider ukuranBerkasProvider
+     */
+    public function testBerkasDiBawahBatasTidakDitolak(int $ukuranByte, bool $harusDitolak): void
+    {
+        $this->assertSame(
+            $harusDitolak,
+            eult_upload_melebihi_batas($ukuranByte, 10 * 1024),
+            sprintf('Berkas %s byte (%.2f MB) salah dinilai.', $ukuranByte, $ukuranByte / 1024 / 1024),
+        );
+    }
+
+    public function testBugNumberFormatTerbukti(): void
+    {
+        // Dokumentasi hidup: tunjukkan mengapa perbandingan lama salah.
+        // Bila CI4 suatu saat mengubah getSizeByUnit() menjadi numerik,
+        // tes ini gagal dan peringatan di helper bisa disederhanakan.
+        $stringLama = number_format(5263.0, 2);
+
+        $this->assertSame('5,263.00', $stringLama, 'Format number_format berubah.');
+        $this->assertTrue(
+            $stringLama > 10240,
+            'Perbandingan string lama memang salah — inilah bug yang diperbaiki.',
+        );
+
+        // Perbandingan baru (byte) memberi hasil benar.
+        $this->assertFalse(eult_upload_melebihi_batas(5263 * 1024, 10 * 1024));
+    }
+
+    public function testHelperTidakMemakaiGetSizeByUnit(): void
+    {
+        // getSizeByUnit() deprecated sejak CI4 4.6 dan mengembalikan string
+        // berformat. Kode tidak boleh membandingkannya dengan angka.
+        $isi = file_get_contents(ROOTPATH . 'app/Helpers/eult_upload_helper.php');
+
+        $this->assertNotFalse($isi);
+        $this->assertDoesNotMatchRegularExpression(
+            '/getSizeByUnit\s*\([^)]*\)\s*[<>]/',
+            $isi,
+            'Helper tidak boleh membandingkan getSizeByUnit() dengan angka.',
+        );
+        $this->assertStringContainsString('eult_upload_melebihi_batas(', $isi);
+    }
+
+    public function testBatasNolBerartiTanpaBatas(): void
+    {
+        // Batas 0/negatif tidak boleh menolak semua berkas.
+        $this->assertFalse(eult_upload_melebihi_batas(100 * 1024 * 1024, 0));
+        $this->assertFalse(eult_upload_melebihi_batas(100 * 1024 * 1024, -5));
+    }
+
     // -------------------------------------------------------------- session ---
 
     public function testMasaSesiMinimalDelapanJam(): void

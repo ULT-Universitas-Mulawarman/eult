@@ -188,15 +188,91 @@ class Login extends BaseController
         $email    = (string) $this->request->getPost('ticketEmail');
         $kodeAcak = eult_generate_kode();
 
+        // ---------------------------------------------------------------
+        // PENCEGAHAN DUPLIKAT (lapis 1) — idempotency token.
+        //
+        // Menutup double-click dan retry cepat: token yang sama hanya boleh
+        // menghasilkan satu tiket. Token dirotasi setelah sukses, sehingga
+        // pengiriman berikutnya (permintaan berbeda) tetap bisa.
+        // ---------------------------------------------------------------
+        $tokenDikirim = (string) $this->request->getPost('submitToken');
+
+        if (! eult_submit_token_cocok($tokenDikirim)) {
+            eult_captcha_generate(4);
+
+            return $this->response->setJSON([
+                'status'      => 'danger',
+                'message'     => 'Permintaan ini sudah diproses sebelumnya. Silakan periksa email Anda untuk nomor tiket, atau muat ulang halaman untuk mengirim permintaan baru.',
+                'new_captcha' => $this->urlGambarCaptcha(),
+            ]);
+        }
+
+        // ---------------------------------------------------------------
+        // PENCEGAHAN DUPLIKAT (lapis 2) — tiket serupa.
+        //
+        // Bila pengguna mengulang setelah menerima galat (mis. unggahan
+        // ditolak), kembalikan nomor tiket yang SUDAH ADA alih-alih membuat
+        // tiket baru. Ini yang membuat pengalaman "gagal lalu coba lagi"
+        // tidak menghasilkan duplikat.
+        // ---------------------------------------------------------------
+        $identitas = (string) $this->request->getPost('ticketIdentitas');
+        $subjek    = (string) $this->request->getPost('ticketSubject');
+        $pesan     = (string) $this->request->getPost('ticketMessage');
+
+        $serupa = $this->tiket->tiketSerupa($identitas, $subjek, $pesan);
+
+        if ($serupa !== false) {
+            log_message('info', 'EULT savetiket: permintaan serupa dikenali, memakai tiket {tiket}', ['tiket' => $serupa['ticketTrackingId']]);
+
+            return $this->response->setJSON([
+                'status'       => 'success',
+                'message'      => 'Permintaan yang sama sudah kami terima sebelumnya. Nomor tiket Anda adalah '
+                    . $serupa['ticketTrackingId']
+                    . '. <br/> Catat nomor tiket anda dan cek progress secara berkala pada menu lacak tiket.',
+                'new_captcha'  => $this->urlGambarCaptcha(),
+                'submit_token' => eult_submit_token(true),
+            ]);
+        }
+
+        // ---------------------------------------------------------------
+        // FASE VALIDASI — tidak menulis apa pun.
+        //
+        // Berkas diperiksa SEBELUM tiket di-INSERT. Sebelumnya tiket
+        // disimpan lebih dulu lalu berkas divalidasi, sehingga penolakan
+        // berkas meninggalkan tiket tanpa arsip (4.156 baris di produksi)
+        // dan pengguna mengulang → duplikat.
+        // ---------------------------------------------------------------
+        $berkas = $this->request->getFile('ticketArchiveId');
+
+        $periksaBerkas = eult_upload_periksa($berkas, [
+            'url'      => WRITEPATH . 'uploads/ticketing/',
+            'type'     => 'pdf',
+            'size'     => eult_upload_max_kb(),
+            'namafile' => '',
+        ]);
+
+        if (! $periksaBerkas['ok']) {
+            eult_captcha_generate(4);
+
+            return $this->response->setJSON([
+                'status'      => 'danger',
+                'message'     => $periksaBerkas['pesan'],
+                'new_captcha' => $this->urlGambarCaptcha(),
+            ]);
+        }
+
         // Alokasi nomor + insert dikunci per kode acak: dua permintaan
         // bersamaan dengan kode sama bisa membaca urutan terakhir yang
         // sama (read-then-write) dan menghasilkan ticketTrackingId ganda.
         // Lihat ModelTicketing::kunciNomorTiket().
         $this->tiket->kunciNomorTiket($kodeAcak);
 
-        $langkah    = 'alokasi nomor tiket';
-        $pesanGalat = null;
-        $proses     = false;
+        $langkah      = 'alokasi nomor tiket';
+        $pesanGalat   = null;
+        $proses       = false;
+        $berkasTersimpan = null;
+        $konfig       = null;
+        $db           = $this->tiket->dbAktif();
 
         try {
             $idTiket   = $this->tiket->nomorTiketBerikutnya($kodeAcak);
@@ -233,17 +309,53 @@ class Login extends BaseController
                 'ticketTrackingId' => $idTiket,
             ];
 
+            // -----------------------------------------------------------
+            // FASE TULIS — tiket dan arsip dalam SATU transaksi.
+            //
+            // CI4 mendukung transaksi bersarang: ModelMaster::tambah() di
+            // dalam transaksi ini hanya menaikkan transDepth, tidak commit
+            // lebih awal. Bila salah satu langkah gagal, keduanya batal.
+            // -----------------------------------------------------------
+            $db->transBegin();
+
             $langkah = 'simpan tiket';
             $proses  = $this->tiket->tambah('d_ticketing', $param);
+
+            if ($proses) {
+                $langkah          = 'simpan arsip';
+                $berkasTersimpan  = eult_upload_simpan($berkas, $konfig, $paramFile, $periksaBerkas['ekstensi']);
+                $proses           = $berkasTersimpan !== false;
+            }
+
+            if ($proses) {
+                $db->transCommit();
+            } else {
+                $db->transRollback();
+                // Pemindahan berkas tidak ikut ter-rollback oleh database.
+                eult_upload_hapus($konfig, $berkasTersimpan);
+                $berkasTersimpan = null;
+            }
         } catch (\Throwable $e) {
             $pesanGalat = $e->getMessage();
+
+            if ($db->transDepth > 0) {
+                $db->transRollback();
+            }
+
+            if ($konfig !== null) {
+                eult_upload_hapus($konfig, $berkasTersimpan);
+            }
+            $berkasTersimpan = null;
+
             log_message('error', 'EULT savetiket gagal pada langkah {langkah}: {pesan}', ['langkah' => $langkah, 'pesan' => $pesanGalat]);
         } finally {
-            $this->tiket->lepasKunciNomorTiket($kodeAcak);
-        }
+            // transStatus tetap false setelah rollback (mode strict). Reset
+            // agar pesan galat dan query berikutnya di request ini berjalan.
+            if ($db->transDepth === 0) {
+                $db->resetTransStatus();
+            }
 
-        if ($proses && $this->request->getFile('ticketArchiveId') !== null && $this->request->getFile('ticketArchiveId')->getError() !== UPLOAD_ERR_NO_FILE) {
-            eult_upload_ticket($konfig, $paramFile);
+            $this->tiket->lepasKunciNomorTiket($kodeAcak);
         }
 
         if ($proses) {
@@ -255,9 +367,11 @@ class Login extends BaseController
             eult_captcha_generate(4);
 
             return $this->response->setJSON([
-                'status'      => 'success',
-                'message'     => 'Permintaan layanan anda berhasil disimpan, nomor tiket anda adalah ' . $idTiket . '. <br/> Catat nomor tiket anda dan cek progress secara berkala pada menu lacak tiket.',
-                'new_captcha' => $this->urlGambarCaptcha(),
+                'status'       => 'success',
+                'message'      => 'Permintaan layanan anda berhasil disimpan, nomor tiket anda adalah ' . $idTiket . '. <br/> Catat nomor tiket anda dan cek progress secara berkala pada menu lacak tiket.',
+                'new_captcha'  => $this->urlGambarCaptcha(),
+                // Rotasi token: pengiriman berikutnya = permintaan baru.
+                'submit_token' => eult_submit_token(true),
             ]);
         }
 

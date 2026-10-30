@@ -452,4 +452,48 @@ class ModelTicketing extends ModelMaster
 
         return $hasil === [] ? false : $hasil;
     }
+
+    /**
+     * Mencari tiket yang kemungkinan besar adalah pengulangan dari permintaan
+     * yang baru saja dikirim (identitas + subjek + pesan sama dalam N menit).
+     *
+     * Dipakai untuk mencegah duplikat akibat pengguna menekan tombol dua kali
+     * atau mengulang setelah menerima pesan galat. Mengembalikan tiket
+     * TERBARU yang cocok, atau false bila tidak ada.
+     *
+     * Catatan: perbandingan pesan memakai hash SHA-256 di sisi PHP, bukan
+     * kolom TEXT langsung, agar tidak bergantung pada collation dan tetap
+     * cepat walau pesan panjang.
+     *
+     * @param int $menit Jendela waktu ke belakang (default 10 menit)
+     *
+     * @return array<string, mixed>|false
+     */
+    public function tiketSerupa(string $identitas, string $subjek, string $pesan, int $menit = 10): array|false
+    {
+        $sejak = date('Y-m-d H:i:s', time() - max(1, $menit) * 60);
+
+        $kandidat = $this->db->table('d_ticketing')
+            ->select('ticketTrackingId,ticketIdentitas,ticketSubject,ticketMessage,ticketCreated,ticketEmail')
+            ->where('ticketIdentitas', $identitas)
+            ->where('ticketSubject', $subjek)
+            ->where('ticketCreated >=', $sejak)
+            ->orderBy('ticketCreated', 'DESC')
+            ->limit(20)
+            ->get()->getResultArray();
+
+        if ($kandidat === []) {
+            return false;
+        }
+
+        $sidik = hash('sha256', $pesan);
+
+        foreach ($kandidat as $baris) {
+            if (hash_equals($sidik, hash('sha256', (string) $baris['ticketMessage']))) {
+                return $baris;
+            }
+        }
+
+        return false;
+    }
 }

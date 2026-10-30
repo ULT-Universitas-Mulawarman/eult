@@ -22,8 +22,56 @@ if (! function_exists('eult_generate_kode')) {
     }
 }
 
-if (! function_exists('eult_auto_increment')) {
+if (! function_exists('eult_submit_token')) {
     /**
+     * Token idempotensi untuk form simpan tiket.
+     *
+     * Satu token dipakai untuk SATU pengiriman. Bila pengguna menekan tombol
+     * dua kali (atau browser mengulang POST karena koneksi lambat), token
+     * yang sama terkirim dua kali; percobaan kedua dikenali sebagai duplikat
+     * dan tidak membuat tiket baru.
+     *
+     * Token TIDAK dirotasi saat submit gagal — pengguna harus bisa mencoba
+     * lagi dengan token yang sama setelah memperbaiki berkas.
+     *
+     * @param bool $rotasi true = buat token baru (dipanggil setelah sukses)
+     */
+    function eult_submit_token(bool $rotasi = false): string
+    {
+        $sesi = session();
+        $kunci = 'eult_submit_token';
+        $token = $sesi->get($kunci);
+
+        if ($rotasi || ! is_string($token) || $token === '') {
+            $token = bin2hex(random_bytes(16));
+            $sesi->set($kunci, $token);
+        }
+
+        return $token;
+    }
+}
+
+if (! function_exists('eult_submit_token_cocok')) {
+    /**
+     * Apakah token yang dikirim form sama dengan token di session.
+     *
+     * Token kosong/tidak dikirim dianggap TIDAK cocok hanya bila session
+     * sudah punya token — mencegah klien lama (tanpa token) melewati proteksi
+     * setelah satu kali sukses.
+     */
+    function eult_submit_token_cocok(?string $dikirim): bool
+    {
+        $tersimpan = session()->get('eult_submit_token');
+
+        if (! is_string($tersimpan) || $tersimpan === '') {
+            return true;
+        }
+
+        return is_string($dikirim) && $dikirim !== '' && hash_equals($tersimpan, $dikirim);
+    }
+}
+
+if (! function_exists('eult_auto_increment')) {    /**
      * Membuat ID arsip berikutnya (porting auto_increment CI3).
      *
      * @param array<string, mixed>|string $kondisi Kondisi WHERE. Caller yang menerima input

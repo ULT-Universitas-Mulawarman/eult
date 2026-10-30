@@ -1964,6 +1964,9 @@
 
                     <form class="kt-form" action="<?= base_url('login') . '/savetiket' ?>" method="POST" enctype="multipart/form-data" novalidate="novalidate" id="kt_create_form">
                         <?= csrf_field() ?>
+                        <!-- Token idempotensi: satu token = satu tiket. Mencegah
+                             duplikat saat tombol ditekan dua kali atau POST diulang. -->
+                        <input type="hidden" name="submitToken" id="submitToken" value="<?= esc(eult_submit_token(), 'attr') ?>">
                         <div class="eult-portlet-body">
 
                             <!-- Section A: Identitas Pemohon -->
@@ -2113,6 +2116,8 @@
                                                name="ticketArchiveId" 
                                                id="ticketArchiveId" 
                                                accept=".pdf,application/pdf"
+                                               required
+                                               aria-required="true"
                                                aria-describedby="upload-hint">
 
                                         <!-- State A: Zona Tarik & Lepas (Empty State) -->

@@ -29,8 +29,13 @@ jobs:
       - name: Siapkan salinan produksi
         run: |
           rm -rf "$SIM" "$SIM_BACKUP"
-          # Salin tanpa writable/session (ribuan file sesi, tidak relevan untuk uji).
-          rsync -a --exclude='writable/session/' /home/eultunmul/apps/eult/ "$SIM"/
+          # Lewati file sesi (ribuan, tidak relevan untuk uji) tetapi tetap
+          # salin writable/session/index.html yang di-track git — kalau tidak,
+          # git status di salinan akan melaporkan file terhapus.
+          rsync -a \
+            --include='writable/session/index.html' \
+            --exclude='writable/session/*' \
+            /home/eultunmul/apps/eult/ "$SIM"/
           test -f "$SIM/.env" || { echo "::error::.env tidak tersalin"; exit 1; }
           echo "Salinan siap:"; du -sh "$SIM"
 

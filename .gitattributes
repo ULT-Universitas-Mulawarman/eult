@@ -1,0 +1,16 @@
+# Normalisasi line ending: repo dipakai di Windows (dev) dan Linux (server).
+# Skrip shell WAJIB LF — CRLF membuat shebang gagal di Linux
+# ("bad interpreter: /usr/bin/env: no such file or directory").
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Biner — jangan diubah line ending-nya.
+*.png   binary
+*.jpg   binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary

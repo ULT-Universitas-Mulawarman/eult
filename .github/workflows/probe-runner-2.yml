@@ -1,0 +1,67 @@
+name: Probe Runner 2
+
+# Probe lanjutan: kepemilikan direktori produksi, user php-fpm, OPcache,
+# dan konfigurasi nginx untuk eult.unmul.ac.id. Dihapus setelah selesai.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Probe production layout
+    runs-on: [self-hosted, eult]
+    steps:
+      - name: Direktori produksi
+        run: |
+          echo "== ls app dir =="
+          ls -la /home/eultunmul/apps/eult 2>&1 | head -30
+          echo "== stat =="
+          stat -c '%U:%G %a %n' /home/eultunmul/apps/eult 2>&1
+          echo "== writable =="
+          ls -la /home/eultunmul/apps/eult/writable 2>&1 | head -15
+          echo "== .env =="
+          test -f /home/eultunmul/apps/eult/.env && echo "ENV_ADA $(stat -c '%U:%G %a' /home/eultunmul/apps/eult/.env)" || echo "ENV_TIDAK_ADA"
+          echo "== .git =="
+          test -d /home/eultunmul/apps/eult/.git && echo "GIT_CLONE" || echo "BUKAN_GIT"
+          echo "== bisa tulis? =="
+          test -w /home/eultunmul/apps/eult && echo "WRITABLE_OK" || echo "NOT_WRITABLE"
+          test -w /home/eultunmul/apps/eult/writable && echo "WRITABLE_DIR_OK" || echo "WRITABLE_DIR_NOT_WRITABLE"
+          echo "== vendor =="
+          ls -d /home/eultunmul/apps/eult/vendor 2>&1
+
+      - name: PHP di direktori produksi
+        run: |
+          cd /home/eultunmul/apps/eult
+          echo "== spark version =="
+          php spark --version 2>&1 | head -3 || true
+          echo "== environment =="
+          php spark env 2>&1 | tail -2 || true
+          echo "== opcache =="
+          php -i 2>/dev/null | grep -iE 'opcache.enable|validate_timestamps|revalidate_freq' | head -6 || true
+          echo "== php mana yang dipakai =="
+          readlink -f "$(command -v php)"
+          echo "== /home/eultunmul/bin/php =="
+          ls -la /home/eultunmul/bin/php 2>&1
+          /home/eultunmul/bin/php -v 2>&1 | head -2
+
+      - name: php-fpm pool
+        run: |
+          echo "== unit php-fpm =="
+          systemctl show php8.5-fpm -p ActiveState -p SubState 2>&1
+          systemctl show php8.4-fpm -p ActiveState -p SubState 2>&1
+          echo "== pool eult =="
+          grep -rns -E '^(user|group|listen)\s*=' /etc/php/*/fpm/pool.d/*.conf 2>/dev/null | head -40 || echo "pool conf tidak terbaca"
+          echo "== proses fpm =="
+          ps -eo user,pid,cmd 2>/dev/null | grep -E 'php-fpm|php8\.[45]-fpm' | grep -v grep | head -10 || true
+
+      - name: nginx eult
+        run: |
+          echo "== conf eult =="
+          cat /etc/nginx/sites-enabled/eult.unmul.ac.id.conf 2>&1 | head -60 || echo "tidak terbaca"
+          echo "== nginx -T (butuh root, dilewati) =="
+
+      - name: Database
+        run: |
+          cd /home/eultunmul/apps/eult
+          echo "== migrate status =="
+          php spark migrate:status 2>&1 | head -20 || true

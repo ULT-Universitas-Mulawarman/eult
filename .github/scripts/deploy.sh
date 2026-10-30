@@ -97,9 +97,12 @@ log "Menyinkronkan kode ke produksi"
 # exclude '.github/' juga mengenai 'vendor/phar-io/manifest/.github/' dan
 # membuat rsync gagal menghapus direktori vendor ("cannot delete non-empty
 # directory"), sehingga paket dev tertinggal di produksi.
+#
+# .github/ ikut disinkronkan (bukan dikecualikan) supaya working tree produksi
+# sama persis dengan commit dan `git status` di sana bersih. File workflow di
+# produksi tidak pernah dieksekusi.
 rsync -a --delete --delay-updates --itemize-changes \
     --exclude='/.git/' \
-    --exclude='/.github/' \
     --exclude='/.env' \
     --exclude='/writable/' \
     --exclude='/build/' \
@@ -134,27 +137,44 @@ rm -f /tmp/eult-rsync.log
 # diambil dari workspace runner (path lokal) sehingga tidak butuh jaringan,
 # SSH key, maupun passphrase.
 #
-# Aman: .env, writable/, dan vendor/ di-gitignore, jadi `reset --hard` tidak
-# menyentuhnya. Kegagalan di sini hanya diperingatkan, tidak menggagalkan deploy.
+# Sengaja TIDAK memakai `reset --hard`: perintah itu menulis ulang working tree
+# dan bisa menghapus/menimpa file. Yang dipakai:
+#   update-ref HEAD  -> memindahkan branch ke commit baru
+#   reset --mixed    -> menyamakan index, tanpa menyentuh satu file pun
+# Working tree sudah disamakan oleh rsync, jadi hasilnya `git status` bersih.
+#
+# Aman: .env, writable/, dan vendor/ di-gitignore sehingga tidak pernah
+# dilaporkan sebagai perubahan. Kegagalan di sini hanya diperingatkan.
 sync_git_metadata() {
     [ -d "$TARGET/.git" ] || return 0
     command -v git >/dev/null 2>&1 || { warn "git tidak ada; metadata git produksi dilewati"; return 0; }
     git -C "$SOURCE" rev-parse --git-dir >/dev/null 2>&1 \
         || { warn "Sumber bukan repo git; metadata git produksi dilewati"; return 0; }
 
-    local sha
+    local sha branch err
     sha=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null) || return 0
+    branch=$(git -C "$TARGET" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch="main"
+    [ "$branch" = "HEAD" ] && branch="main"
 
-    if ! git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>/dev/null; then
-        warn "fetch objek git dari workspace gagal; metadata git produksi dilewati"
+    if ! err=$(git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>&1); then
+        warn "fetch objek git dari workspace gagal; metadata git dilewati"
+        [ -n "$err" ] && warn "  $err"
         return 0
     fi
 
-    if git -C "$TARGET" reset --hard --quiet FETCH_HEAD 2>/dev/null; then
-        log "Git produksi disinkronkan ke ${sha:0:7}"
-    else
-        warn "reset --hard git produksi gagal (kode tetap ter-deploy)"
+    if ! err=$(git -C "$TARGET" update-ref "refs/heads/$branch" "$sha" 2>&1); then
+        warn "update-ref ke ${sha:0:7} gagal; metadata git dilewati"
+        [ -n "$err" ] && warn "  $err"
+        return 0
     fi
+
+    if ! err=$(git -C "$TARGET" reset --mixed --quiet 2>&1); then
+        warn "reset --mixed gagal; metadata git mungkin tidak akurat"
+        [ -n "$err" ] && warn "  $err"
+        return 0
+    fi
+
+    log "Git produksi disinkronkan ke ${sha:0:7} ($branch)"
 }
 sync_git_metadata
 

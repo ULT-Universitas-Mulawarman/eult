@@ -108,39 +108,73 @@ atau biarkan deploy berikutnya yang merapikannya sendiri.
 | `DEPLOY_PATH` | `/home/eultunmul/apps/eult` | Direktori aplikasi |
 | `DEPLOY_HEALTHCHECK_URL` | `http://192.168.55.105/` | URL yang di-curl dari server |
 | `DEPLOY_HEALTHCHECK_HOST` | `eult.unmul.ac.id` | Header `Host` untuk health check |
-| `DEPLOY_MIGRATE` | `false` | Jalankan `php spark migrate` saat deploy |
+| `DEPLOY_MIGRATE` | `true` (diset di repo; fallback workflow `false`) | Jalankan `php spark migrate` saat deploy |
 | `DEPLOY_KEEP_BACKUPS` | `5` | Jumlah arsip backup disimpan |
 
 > Health check memakai IP + header `Host` karena `https://eult.unmul.ac.id`
 > tidak dapat di-resolve dari dalam server itu sendiri (DNS hairpin).
 
-## Migrasi database — status saat ini
+## Migrasi database
 
-**Migrasi belum dapat dijalankan otomatis.** Dua hambatan di server:
+**Migrasi otomatis sudah aktif** (`DEPLOY_MIGRATE=true`).
 
-1. User DB `eult_app` belum punya izin `CREATE`/`ALTER`:
-   ```
-   CREATE command denied to user 'eult_app'@'localhost' for table `db_eultunmul`.`migrations`
-   ```
-2. Tabel `migrations` belum pernah dibuat, sehingga `php spark migrate` gagal
-   sebelum sempat menjalankan migrasi apa pun.
+### Riwayat: kenapa sempat tidak bisa
 
-Karena itu `DEPLOY_MIGRATE=false` secara default dan deploy hanya memperingatkan.
-Kode aplikasi sudah defensif: `Ticketing::simpanRating()` dan
-`Cektiket::simpanRating()` memeriksa `getFieldNames('d_rating')` sebelum menulis
-kolom `ratingKeterangan`, jadi fitur itu otomatis nonaktif sampai kolomnya ada.
+Awalnya `php spark migrate` gagal karena user `eult_app` hanya punya
+`SELECT, INSERT, UPDATE, DELETE`:
 
-Untuk mengaktifkan migrasi otomatis, minta DBA menjalankan:
+```
+CREATE command denied to user 'eult_app'@'localhost' for table `db_eultunmul`.`migrations`
+```
+
+Grant diperluas lewat Virtualmin → Edit Database Permissions untuk
+`db_eultunmul`, user `eult_app`, host `127.0.0.1`:
+
+| Privilege | Dipakai untuk |
+|---|---|
+| `CREATE` | tabel `migrations` |
+| `ALTER` | `addColumn` pada migrasi |
+| `INDEX` | tambah/ubah index |
+| `DROP` | `migrate:rollback` / `migrate:refresh` |
+| `REFERENCES` | foreign key |
+
+`GRANT OPTION` sengaja **tidak** diberikan — user aplikasi tidak boleh
+membagikan hak akses.
+
+Sama dengan SQL:
 
 ```sql
 GRANT CREATE, ALTER, INDEX, DROP, REFERENCES
-  ON db_eultunmul.* TO 'eult_app'@'localhost';
+  ON db_eultunmul.* TO 'eult_app'@'127.0.0.1';
 FLUSH PRIVILEGES;
 ```
 
-lalu set variabel repo `DEPLOY_MIGRATE=true`. Migrasi
-`2026-10-28-223816_AddRatingKeterangan` bersifat idempoten (memeriksa
-`tableExists` dan `getFieldNames` sebelum `addColumn`), jadi aman diulang.
+> Host-nya `127.0.0.1`, bukan `localhost` — `EULT_DB_HOST=127.0.0.1` membuat
+> koneksi tercatat sebagai `eult_app@127.0.0.1`. Pesan error menampilkan
+> `@localhost` karena itu nama host koneksi, bukan entri grant.
+
+### Status sekarang
+
+Migrasi `2026-10-28-223816_AddRatingKeterangan` sudah dijalankan (batch 1) dan
+kolom `d_rating.ratingKeterangan` (`TEXT NULL`) sudah ada. Fitur keterangan
+rating pada tiket aktif.
+
+Migrasi ini idempoten — memeriksa `tableExists('d_rating')` dan
+`getFieldNames('d_rating')` sebelum `addColumn`, jadi aman diulang. Kode
+`Ticketing::simpanRating()` dan `Cektiket::simpanRating()` juga memeriksa
+`getFieldNames()` sebelum menulis, sehingga tidak error bila kolom belum ada.
+
+### Rollback migrasi
+
+```bash
+cd /home/eultunmul/apps/eult
+php spark migrate:rollback   # membatalkan batch terakhir
+php spark migrate:status     # cek status
+```
+
+Catatan: rollback kode (otomatis saat deploy gagal) **tidak** membatalkan
+migrasi database. Bila rilis berisi migrasi yang mengubah skema, siapkan
+`migrate:rollback` manual.
 
 ## Rollback manual
 

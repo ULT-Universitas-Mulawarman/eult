@@ -89,6 +89,11 @@ jobs:
       url: ${{ vars.DEPLOY_HEALTHCHECK_URL || 'http://192.168.55.105/' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # History lengkap diperlukan agar deploy.sh bisa menyamakan metadata
+          # git produksi (fetch objek + update-ref). Default checkout hanya
+          # mengambil 1 commit, sehingga parent commit tidak ikut terkirim.
+          fetch-depth: 0
 
       - name: Build dependensi produksi
         run: composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader

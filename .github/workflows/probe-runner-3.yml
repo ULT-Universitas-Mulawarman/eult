@@ -1,0 +1,65 @@
+name: Probe Runner 3
+
+# Probe terakhir: struktur public_html, migrasi, dan hak akses DB.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Probe webroot & migrations
+    runs-on: [self-hosted, eult]
+    steps:
+      - name: public_html
+        run: |
+          echo "== ls -la public_html =="
+          ls -la /home/eultunmul/public_html 2>&1 | head -20
+          echo "== symlink? =="
+          readlink -f /home/eultunmul/public_html 2>&1
+          echo "== index.php =="
+          head -30 /home/eultunmul/public_html/index.php 2>&1 || echo "tidak ada index.php"
+          echo "== .htaccess =="
+          cat /home/eultunmul/public_html/.htaccess 2>&1 | head -20 || echo "tidak ada"
+
+      - name: Migrasi di repo
+        run: |
+          echo "== isi app/Database/Migrations =="
+          ls -la /home/eultunmul/apps/eult/app/Database/Migrations 2>&1
+          echo "== tabel migrations ada? =="
+          cd /home/eultunmul/apps/eult
+          php spark db:table migrations 2>&1 | head -10 || true
+
+      - name: Hak akses DB
+        run: |
+          cd /home/eultunmul/apps/eult
+          echo "== grants (via spark db:table) =="
+          php -r '
+            $env = parse_ini_file("/home/eultunmul/apps/eult/.env", false, INI_SCANNER_RAW);
+            $h = $env["EULT_DB_HOST"] ?? "127.0.0.1";
+            $u = $env["EULT_DB_USER"] ?? "";
+            $p = $env["EULT_DB_PASS"] ?? "";
+            $d = $env["EULT_DB_NAME"] ?? "";
+            echo "host=$h user=$u db=$d\n";
+            $m = @new mysqli($h, $u, $p, $d);
+            if ($m->connect_error) { echo "CONNECT_ERROR: ".$m->connect_error."\n"; exit; }
+            echo "CONNECT_OK\n";
+            $r = $m->query("SHOW GRANTS FOR CURRENT_USER()");
+            while ($row = $r->fetch_row()) { echo "GRANT: ".$row[0]."\n"; }
+            $r2 = $m->query("SHOW TABLES LIKE \"migrations\"");
+            echo "migrations_table: ".($r2->num_rows ? "ADA" : "TIDAK_ADA")."\n";
+          ' 2>&1 | head -30
+
+      - name: HTTP dari server
+        run: |
+          echo "== curl via IP nginx =="
+          curl -s -o /dev/null -w 'ip=%{http_code}\n' --max-time 10 -H 'Host: eult.unmul.ac.id' http://192.168.55.105/ 2>&1 || echo "gagal"
+          echo "== curl domain =="
+          curl -s -o /dev/null -w 'domain=%{http_code}\n' --max-time 10 https://eult.unmul.ac.id/ 2>&1 || echo "gagal"
+          echo "== curl localhost =="
+          curl -s -o /dev/null -w 'localhost=%{http_code}\n' --max-time 10 http://127.0.0.1/ 2>&1 || echo "gagal"
+
+      - name: Log terakhir
+        run: |
+          echo "== log app =="
+          ls -1t /home/eultunmul/apps/eult/writable/logs/*.log 2>/dev/null | head -2
+          tail -20 "$(ls -1t /home/eultunmul/apps/eult/writable/logs/*.log 2>/dev/null | head -1)" 2>/dev/null || echo "tidak ada log"

@@ -1,0 +1,75 @@
+name: Deteksi Regresi Data
+
+# Pemeriksaan berkala: memastikan tidak ada tiket yang tersimpan tanpa arsip.
+#
+# Latar belakang: sebelum perbaikan 2026-10-30, unggahan yang gagal tetap
+# meninggalkan baris tiket (4.156 baris, 10,7%). Perbaikan kode menghentikan
+# sumbernya; job ini memastikan tidak ada regresi.
+#
+# Hanya membaca (read-only). Bila angkanya naik, job gagal agar terlihat.
+
+on:
+  schedule:
+    # Setiap hari 06:00 WITA (22:00 UTC hari sebelumnya).
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: regresi-data
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  arsip:
+    name: Tiket tanpa arsip
+    runs-on: [self-hosted, eult]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hitung tiket tanpa arsip
+        run: |
+          cd /home/eultunmul/apps/eult
+          php spark eult:arsip --dry-run 2>&1 | tee /tmp/eult-arsip.txt
+
+      - name: Nilai ambang
+        run: |
+          # Ambang: kandidat hapus (tiket tanpa arsip DAN tanpa jejak
+          # penanganan) harus 0. Tiket tanpa arsip yang SUDAH ditangani
+          # petugas tidak dihitung — arsipnya mungkin hilang karena sebab lain.
+          baris=$(grep -oP 'Kandidat hapus.*: \K[0-9]+' /tmp/eult-arsip.txt | tail -1)
+
+          if [ -z "$baris" ]; then
+            echo "::error::Tidak bisa membaca jumlah kandidat dari output eult:arsip"
+            cat /tmp/eult-arsip.txt
+            exit 1
+          fi
+
+          echo "kandidat_hapus=$baris" >> "$GITHUB_OUTPUT" 2>/dev/null || true
+
+          {
+            echo "### Deteksi regresi data"
+            echo ""
+            echo "| Item | Nilai |"
+            echo "|---|---|"
+            echo "| Kandidat tiket tanpa arsip | **$baris** |"
+            echo "| Ambang | 0 |"
+            echo "| Waktu | $(date '+%Y-%m-%d %H:%M:%S %Z') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$baris" -ne 0 ]; then
+            echo "::error::$baris tiket tanpa arsip terdeteksi — kemungkinan regresi bug unggahan."
+            echo ""
+            echo "Tindakan:"
+            echo "  1. Periksa log: writable/logs/log-<tanggal>.log"
+            echo "  2. Tinjau kandidat: php spark eult:arsip --semua"
+            echo "  3. Ekspor untuk petugas: php spark eult:arsip --csv=/tmp/kandidat.csv --semua"
+            exit 1
+          fi
+
+          echo "Tidak ada tiket tanpa arsip. Sehat."
+
+      - name: Bersihkan
+        if: always()
+        run: rm -f /tmp/eult-arsip.txt

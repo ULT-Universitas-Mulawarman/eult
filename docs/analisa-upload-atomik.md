@@ -2,6 +2,9 @@
 
 Tanggal analisa: 2026-10-30. Data dari database produksi (read-only).
 
+> **Status: SELESAI DIIMPLEMENTASIKAN** (2026-10-30). P1–P5 sudah terpasang.
+> Lihat bagian [Implementasi](#implementasi) di akhir dokumen.
+
 ## Ringkasan
 
 Benar. Tiket **sudah di-INSERT dan ter-commit** sebelum berkas diunggah. Bila
@@ -211,3 +214,97 @@ pembersihan berkala layak dipertimbangkan.
 Bila P1+P2 terpasang, penyebab utama 4.156 tiket hilang. P3 menutup sisanya
 dan membuat pengalaman pengguna lebih baik karena mereka menerima nomor tiket
 yang sudah ada, bukan pesan galat.
+
+## Implementasi
+
+Semua rekomendasi sudah terpasang (2026-10-30).
+
+### P1 — validasi sebelum tulis, simpan atomik
+
+`app/Helpers/eult_upload_helper.php` dipecah menjadi tiga fungsi:
+
+| Fungsi | Menulis? | Isi |
+|---|---|---|
+| `eult_upload_periksa()` | **tidak** | ekstensi, magic byte, ukuran |
+| `eult_upload_simpan()` | ya | pindah berkas + insert `d_archive` |
+| `eult_upload_hapus()` | ya | hapus berkas saat rollback |
+
+`Login::savetiket()` dan `Ticketing::save()` kini:
+
+```
+1. eult_upload_periksa()      -> gagal = berhenti, TIDAK ADA yang tersimpan
+2. $db->transBegin()
+3. insert d_ticketing
+4. eult_upload_simpan()       -> insert d_archive
+5. $db->transCommit()         -> gagal = rollback + eult_upload_hapus()
+```
+
+CI4 mendukung transaksi bersarang (`transDepth`), jadi `ModelMaster::tambah()`
+di dalam transaksi luar tidak commit lebih awal. `resetTransStatus()` dipanggil
+setelah rollback karena mode strict membiarkan `transStatus = false` dan akan
+menggagalkan query berikutnya di request yang sama.
+
+Pemindahan berkas tidak bisa di-rollback database, karena itu `eult_upload_simpan()`
+menghapus berkas sendiri bila insert `d_archive` gagal, dan controller
+memanggil `eult_upload_hapus()` pada jalur rollback.
+
+### P2 — berkas wajib
+
+- `eult_upload_periksa()` dipanggil dengan `$wajib = true` di portal publik
+  (default), sehingga berkas kosong ditolak **sebelum** tiket dibuat.
+- `<input type="file">` di view mendapat `required` + `aria-required="true"`.
+- Validasi klien menambahkan aturan `ticketArchiveId: required + extension pdf`.
+
+Di `Ticketing::save()` berkas tetap **opsional** (`$wajib = false`) karena
+petugas boleh mengubah tiket tanpa mengunggah ulang.
+
+### P3 — pencegahan duplikat
+
+**Lapis 1 — idempotency token** (`eult_submit_token()` di `eult_kode_helper.php`):
+
+- Token disimpan di session, dikirim sebagai hidden input `submitToken`.
+- Token yang sama hanya menghasilkan satu tiket; percobaan kedua ditolak
+  dengan pesan "sudah diproses sebelumnya".
+- Token **dirotasi** setelah sukses, dan nilai barunya dikirim di respons
+  (`submit_token`) agar klien menyimpannya. Token tidak dirotasi saat gagal,
+  sehingga pengguna bisa memperbaiki berkas lalu mengirim ulang.
+
+**Lapis 2 — deteksi tiket serupa** (`ModelTicketing::tiketSerupa()`):
+
+- Mencari tiket dengan identitas + subjek sama dalam 10 menit terakhir.
+- Pesan dibandingkan lewat hash SHA-256 (bukan kolom `TEXT` langsung) agar
+  tidak bergantung collation dan tetap cepat.
+- Bila cocok, pengguna menerima **nomor tiket yang sudah ada** dengan status
+  `success`, bukan pesan galat. Ini yang membuat "gagal lalu coba lagi"
+  tidak menghasilkan duplikat.
+
+### P4 — tinjau data lama
+
+```bash
+php spark eult:arsip --dry-run              # ringkasan + 20 contoh (default)
+php spark eult:arsip --semua                # semua kandidat
+php spark eult:arsip --csv=kandidat.csv     # ekspor untuk petugas
+php spark eult:arsip --hapus --ya           # hapus (BACKUP DULU)
+```
+
+Kandidat hapus = tiket tanpa arsip **dan** tanpa `d_replies` **dan** tanpa
+`d_disposisi` **dan** tanpa `d_history`. Tiket yang pernah ditindaklanjuti
+petugas tidak pernah diusulkan untuk dihapus, walau arsipnya hilang.
+
+### P5 — deteksi regresi
+
+`.github/workflows/regresi-data.yml` berjalan **harian 06:00 WITA** di
+self-hosted runner. Menjalankan `eult:arsip --dry-run` dan **gagal** bila
+jumlah kandidat ≠ 0, sehingga regresi terlihat di tab Actions.
+
+### Tes pengunci
+
+`tests/unit/AlurSimpanTiketTest.php` — 23 tes, termasuk:
+
+- `eult_upload_periksa()` tidak boleh memanggil `move/mkdir/unlink/insert`
+- validasi berkas harus **sebelum** `transBegin()`
+- insert tiket dan arsip harus di antara `transBegin()` dan `transCommit()`
+- rollback harus memanggil `eult_upload_hapus()`
+- kedua controller tidak boleh memakai pola lama (upload setelah commit)
+- kandidat hapus harus mengecualikan tiket berjejak penanganan
+- workflow regresi harus terjadwal dan memakai `--dry-run`

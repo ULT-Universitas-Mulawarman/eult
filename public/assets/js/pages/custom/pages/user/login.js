@@ -399,6 +399,10 @@ var KTLoginGeneral = function () {
                     ticketPriority: "required",
                     ticketSubject: "required",
                     ticketMessage: "required",
+                    ticketArchiveId: {
+                        required: true,
+                        extension: "pdf"
+                    },
                     captcha: {
                         required: true
                     }
@@ -431,6 +435,10 @@ var KTLoginGeneral = function () {
                     ticketMessage: {
                         required: "Pesan Wajib Diisi !"
                     },
+                    ticketArchiveId: {
+                        required: "Dokumen berkas persyaratan wajib dilampirkan !",
+                        extension: "Berkas harus berformat PDF !"
+                    },
                     captcha: {
                         required: "Silakan masukkan CAPTCHA"
                     }
@@ -451,6 +459,14 @@ var KTLoginGeneral = function () {
                 // Mengizinkan ajaxSubmit menangani multipart/form-data untuk upload berkas PDF
                 success: function (response, status, xhr, $form) {
                     var eR = (typeof response === 'string' ? JSON.parse(response) : response);
+
+                    // Token idempotensi dirotasi SERVER setelah tiket dibuat
+                    // atau saat permintaan serupa dikenali. Nilai baru harus
+                    // diambil dari respons — token buatan klien tidak akan
+                    // cocok dengan session di server.
+                    if (eR.submit_token) {
+                        $('#submitToken').val(eR.submit_token);
+                    }
 
                     setTimeout(function () {
                         btn.removeClass('kt-spinner kt-spinner--right kt-spinner--sm kt-spinner--light').attr('disabled', false);

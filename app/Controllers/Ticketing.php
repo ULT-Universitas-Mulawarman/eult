@@ -1215,12 +1215,36 @@ class Ticketing extends BaseController
             eult_message_kirim($this->judul . ' Gagal Disimpan, kategori layanan tidak valid atau sudah tidak tersedia. Silakan pilih ulang kategori layanan.', 'error');
         }
 
+        // ---------------------------------------------------------------
+        // FASE VALIDASI — tidak menulis apa pun.
+        //
+        // Berkas diperiksa SEBELUM tiket disimpan. Berkas bersifat OPSIONAL
+        // di sini: petugas boleh mengubah tiket tanpa mengunggah ulang.
+        // ---------------------------------------------------------------
+        $berkas = $this->request->getFile('ticketArchiveId');
+
+        $periksaBerkas = eult_upload_periksa($berkas, [
+            'url'      => WRITEPATH . 'uploads/ticketing/',
+            'type'     => 'pdf',
+            'size'     => eult_upload_max_kb(),
+            'namafile' => '',
+        ], false);
+
+        if (! $periksaBerkas['ok']) {
+            eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $periksaBerkas['pesan'], 'error');
+        }
+
         // Alokasi nomor + insert dikunci per kode acak: dua permintaan
         // bersamaan dengan kode sama bisa membaca urutan terakhir yang
         // sama (read-then-write) dan menghasilkan ticketTrackingId ganda.
         if ($idLama === '') {
             $this->tiket->kunciNomorTiket($kodeAcak);
         }
+
+        $proses          = false;
+        $berkasTersimpan = null;
+        $konfig          = null;
+        $db              = $this->tiket->dbAktif();
 
         try {
             $idTiket = $idLama === ''
@@ -1247,27 +1271,74 @@ class Ticketing extends BaseController
 
             if ($idLama === '') {
                 $param['ticketTrackingId'] = $idTiket;
-                $proses                    = $this->tiket->tambah('d_ticketing', $param);
             } else {
                 $param['ticketUpdated']   = date('Y-m-d H:i:s');
                 $param['ticketUpdatedBy'] = $this->pengguna['susrProfil'];
-                $proses                   = $this->tiket->ubah('d_ticketing', $param, ['ticketTrackingId' => $idLama]);
+            }
+
+            $konfig = [
+                'url'      => WRITEPATH . 'uploads/ticketing/',
+                'type'     => 'pdf',
+                'size'     => eult_upload_max_kb(),
+                'namafile' => 'TIKET_' . str_replace('-', '', $idTiket) . '_' . date('YmdHis'),
+            ];
+
+            // -----------------------------------------------------------
+            // FASE TULIS — tiket dan arsip dalam SATU transaksi.
+            // Bila salah satu gagal, keduanya batal (lihat Login::savetiket).
+            // -----------------------------------------------------------
+            $db->transBegin();
+
+            $proses = $idLama === ''
+                ? $this->tiket->tambah('d_ticketing', $param)
+                : $this->tiket->ubah('d_ticketing', $param, ['ticketTrackingId' => $idLama]);
+
+            if ($proses && $periksaBerkas['ekstensi'] !== '') {
+                $berkasTersimpan = eult_upload_simpan($berkas, $konfig, $paramFile, $periksaBerkas['ekstensi']);
+                $proses          = $berkasTersimpan !== false;
+            }
+
+            if ($proses) {
+                $db->transCommit();
+            } else {
+                $db->transRollback();
+                eult_upload_hapus($konfig, $berkasTersimpan);
+                $berkasTersimpan = null;
             }
         } catch (ResponsAwalException $e) {
             // Respons terjadwal (mis. 403 dari tiketMentahTerotorisasi) harus diteruskan apa adanya.
+            if ($db->transDepth > 0) {
+                $db->transRollback();
+            }
+
+            if ($konfig !== null) {
+                eult_upload_hapus($konfig, $berkasTersimpan);
+            }
+
             throw $e;
         } catch (\Throwable $e) {
+            if ($db->transDepth > 0) {
+                $db->transRollback();
+            }
+
+            if ($konfig !== null) {
+                eult_upload_hapus($konfig, $berkasTersimpan);
+            }
+
             log_message('error', 'EULT Ticketing::save gagal pada langkah {langkah}: {pesan}', ['langkah' => 'simpan tiket', 'pesan' => $e->getMessage()]);
             eult_message_kirim($this->judul . ' Gagal Disimpan, ' . $e->getMessage(), 'error');
         } finally {
+            if ($db->transDepth === 0) {
+                $db->resetTransStatus();
+            }
+
             if ($idLama === '') {
                 $this->tiket->lepasKunciNomorTiket($kodeAcak);
             }
         }
 
-        // Riwayat, email, dan unggahan hanya boleh ditulis bila baris
-        // tiketnya benar-benar tersimpan (sebelumnya ditulis walau insert
-        // gagal).
+        // Riwayat dan email hanya ditulis bila baris tiketnya benar-benar
+        // tersimpan, dan setelah transaksi commit (bukan di dalamnya).
         if (! empty($proses) && $idLama === '') {
             eult_save_history('Tiket Telah Dibuat Oleh ' . $this->pengguna['susrProfil'], $idTiket);
 
@@ -1277,15 +1348,6 @@ class Ticketing extends BaseController
             }
         } elseif (! empty($proses)) {
             eult_save_history('Tiket Telah Diubah Oleh ' . $this->pengguna['susrProfil'], $idTiket);
-        }
-
-        if (! empty($proses) && $this->request->getFile('ticketArchiveId') !== null && $this->request->getFile('ticketArchiveId')->getError() !== UPLOAD_ERR_NO_FILE) {
-            eult_upload_ticket([
-                'url'      => WRITEPATH . 'uploads/ticketing/',
-                'type'     => 'pdf',
-                'size'     => eult_upload_max_kb(),
-                'namafile' => 'TIKET_' . str_replace('-', '', $idTiket) . '_' . date('YmdHis'),
-            ], $paramFile);
         }
 
         if (! empty($proses)) {

@@ -100,58 +100,173 @@ if (! function_exists('eult_upload_pesan_galat')) {
     }
 }
 
-if (! function_exists('eult_upload_ticket')) {
+if (! function_exists('eult_upload_periksa')) {
     /**
-     * Mengunggah lampiran tiket (field 'ticketArchiveId') lalu
-     * mencatatnya ke d_archive via ModelMaster.
+     * FASE 1 — memeriksa berkas TANPA menulis apa pun.
+     *
+     * Dipisah dari penyimpanan supaya controller bisa membatalkan request
+     * SEBELUM baris tiket masuk database. Sebelumnya validasi dan penyimpanan
+     * menyatu, sehingga tiket sudah ter-commit saat berkas ditolak —
+     * menghasilkan tiket tanpa arsip (4.156 baris di produksi, 10,7%).
+     *
+     * Tidak melempar exception: pemanggil yang memutuskan cara merespons,
+     * sehingga fungsi ini juga aman dipakai di dalam transaksi.
      *
      * @param array{url:string,type:string,size:int,namafile:string} $konfig
+     * @param bool $wajib false = berkas boleh tidak ada (mis. petugas mengubah
+     *                     tiket tanpa mengunggah ulang)
+     *
+     * @return array{ok:bool, pesan:string, ekstensi:string}
      */
-    function eult_upload_ticket(array $konfig, array $paramArsip): bool
+    function eult_upload_periksa(?\CodeIgniter\HTTP\Files\UploadedFile $berkas, array $konfig, bool $wajib = true): array
     {
-        $request = service('request');
-        $berkas  = $request->getFile('ticketArchiveId');
-
         if ($berkas === null || $berkas->getError() === UPLOAD_ERR_NO_FILE) {
-            return false;
+            return [
+                'ok'       => ! $wajib,
+                'pesan'    => $wajib ? 'Berkas persyaratan wajib dilampirkan.' : '',
+                'ekstensi' => '',
+            ];
         }
 
         if (! $berkas->isValid()) {
-            eult_message_kirim(eult_upload_pesan_galat($berkas->getError()), 'error');
+            return ['ok' => false, 'pesan' => eult_upload_pesan_galat($berkas->getError()), 'ekstensi' => ''];
         }
 
-        $tujuan = rtrim($konfig['url'], '/') . '/';
-        if (! is_dir($tujuan)) {
-            mkdir($tujuan, 0755, true);
-        }
-
-        // Validasi ekstensi sesuai allowed_types CI3 (mis. 'pdf' atau 'pdf|jpg|png')
-        $diizinkan = explode('|', strtolower($konfig['type']));
+        // Ekstensi sesuai allowed_types CI3 (mis. 'pdf' atau 'pdf|jpg|png')
+        $diizinkan = explode('|', strtolower((string) $konfig['type']));
         $ekstensi  = strtolower($berkas->getExtension());
+
         if (! in_array($ekstensi, $diizinkan, true)) {
-            eult_message_kirim('Tipe file tidak diizinkan. Hanya: ' . $konfig['type'], 'error');
+            return [
+                'ok'       => false,
+                'pesan'    => 'Tipe file tidak diizinkan. Hanya: ' . $konfig['type'],
+                'ekstensi' => $ekstensi,
+            ];
         }
 
         // Ekstensi bisa dipalsukan dengan rename — cocokkan isi berkas
         // (magic byte) dengan tipe yang diklaim.
         if (! eult_upload_konten_valid($berkas, $ekstensi)) {
-            eult_message_kirim('Isi file tidak cocok dengan tipe ' . strtoupper($ekstensi) . '.', 'error');
+            return [
+                'ok'       => false,
+                'pesan'    => 'Isi file tidak cocok dengan tipe ' . strtoupper($ekstensi) . '.',
+                'ekstensi' => $ekstensi,
+            ];
         }
 
-        // Validasi ukuran (CI3 max_size dalam KB).
         // Bandingkan BYTE, bukan getSizeByUnit('kb') yang mengembalikan string
         // berformat "5,263.00" dan membuat perbandingan jadi perbandingan teks.
         if (eult_upload_melebihi_batas((int) $berkas->getSize(), (int) $konfig['size'])) {
-            eult_message_kirim('Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.', 'error');
+            return [
+                'ok'       => false,
+                'pesan'    => 'Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.',
+                'ekstensi' => $ekstensi,
+            ];
         }
 
-        $namaBaru                    = $konfig['namafile'] . '.' . $ekstensi;
-        $berkas->move($tujuan, $namaBaru, true);
+        return ['ok' => true, 'pesan' => '', 'ekstensi' => $ekstensi];
+    }
+}
+
+if (! function_exists('eult_upload_simpan')) {
+    /**
+     * FASE 2 — memindahkan berkas dan mencatat d_archive. TIDAK memvalidasi.
+     *
+     * Wajib dipanggil setelah eult_upload_periksa() lolos. Bila insert
+     * d_archive gagal, berkas yang sudah dipindah dihapus lagi agar tidak
+     * menjadi berkas yatim.
+     *
+     * @param array{url:string,type:string,size:int,namafile:string} $konfig
+     *
+     * @return string|false Nama berkas tersimpan, atau false bila gagal.
+     */
+    function eult_upload_simpan(
+        \CodeIgniter\HTTP\Files\UploadedFile $berkas,
+        array $konfig,
+        array $paramArsip,
+        ?string $ekstensi = null,
+    ): string|false {
+        $tujuan = rtrim($konfig['url'], '/') . '/';
+
+        if (! is_dir($tujuan) && ! @mkdir($tujuan, 0755, true) && ! is_dir($tujuan)) {
+            log_message('error', 'EULT upload: folder tujuan tidak bisa dibuat: {tujuan}', ['tujuan' => $tujuan]);
+
+            return false;
+        }
+
+        $ekstensi ??= strtolower($berkas->getExtension());
+        $namaBaru = $konfig['namafile'] . '.' . $ekstensi;
+
+        try {
+            $berkas->move($tujuan, $namaBaru, true);
+        } catch (\Throwable $e) {
+            log_message('error', 'EULT upload: gagal memindahkan berkas: {pesan}', ['pesan' => $e->getMessage()]);
+
+            return false;
+        }
+
         $paramArsip['archiveFile'] = $namaBaru;
 
         $model = new \App\Models\ModelMaster();
 
-        return $model->tambah('d_archive', $paramArsip);
+        if (! $model->tambah('d_archive', $paramArsip)) {
+            // Rollback berkas: baris d_archive tidak ada, berkas tidak boleh ada.
+            @unlink($tujuan . $namaBaru);
+            log_message('error', 'EULT upload: insert d_archive gagal, berkas dibatalkan: {berkas}', ['berkas' => $namaBaru]);
+
+            return false;
+        }
+
+        return $namaBaru;
+    }
+}
+
+if (! function_exists('eult_upload_hapus')) {
+    /**
+     * Menghapus berkas hasil eult_upload_simpan() — dipakai saat transaksi
+     * tiket di-rollback, karena pemindahan berkas tidak ikut ter-rollback.
+     *
+     * @param array{url:string,type:string,size:int,namafile:string} $konfig
+     */
+    function eult_upload_hapus(array $konfig, ?string $namaBerkas): void
+    {
+        if ($namaBerkas === null || $namaBerkas === '') {
+            return;
+        }
+
+        $jalur = rtrim($konfig['url'], '/') . '/' . basename($namaBerkas);
+
+        if (is_file($jalur)) {
+            @unlink($jalur);
+        }
+    }
+}
+
+if (! function_exists('eult_upload_ticket')) {
+    /**
+     * Pembungkus lama: validasi lalu simpan, membatalkan request bila gagal.
+     *
+     * Dipertahankan untuk pemanggil yang urutannya sudah aman (unggah lebih
+     * dulu, baru menulis). Alur simpan tiket memakai eult_upload_periksa() +
+     * eult_upload_simpan() secara terpisah agar bisa atomik.
+     *
+     * @param array{url:string,type:string,size:int,namafile:string} $konfig
+     */
+    function eult_upload_ticket(array $konfig, array $paramArsip): bool
+    {
+        $berkas = service('request')->getFile('ticketArchiveId');
+
+        if ($berkas === null || $berkas->getError() === UPLOAD_ERR_NO_FILE) {
+            return false;
+        }
+
+        $periksa = eult_upload_periksa($berkas, $konfig);
+
+        if (! $periksa['ok']) {
+            eult_message_kirim($periksa['pesan'], 'error');
+        }
+
+        return eult_upload_simpan($berkas, $konfig, $paramArsip, $periksa['ekstensi']) !== false;
     }
 }
 

@@ -92,13 +92,36 @@ Kolom yang dikoreksi: `d_ticketing` (9 kolom waktu), `d_disposisi` (2),
 
 ### Tiga lapis batas
 
-Berkas harus melewati tiga lapis; yang paling kecil menentukan:
+Berkas harus melewati tiga lapis. **Batas efektif = lapis terkecil.**
 
-| Lapis | Lokasi | Nilai sebelum | Target |
+| Lapis | Lokasi | Nilai sekarang | Peran |
 |---|---|---|---|
-| nginx | `/etc/nginx/sites-enabled/eult.unmul.ac.id.conf` | `client_max_body_size 20M` | ✅ cukup |
-| PHP | `/etc/php/8.5/fpm/php.ini` (bukan CLI/CGI) | `upload_max_filesize 2M`, `post_max_size 8M` | ❗ **harus dinaikkan** |
-| Aplikasi | `eult_upload_max_kb()` | 15–20 MB tidak konsisten | ✅ 10 MB |
+| nginx | `/etc/nginx/sites-enabled/eult.unmul.ac.id.conf` | `client_max_body_size 20M` | pagar luar |
+| PHP | pool `/etc/php/8.5/fpm/pool.d/1792665430372593.conf` | `upload_max_filesize 20M`, `post_max_size 64M` | pagar longgar |
+| **Aplikasi** | `eult_upload_max_kb()` | **10 MB** | **penegak aturan** |
+
+**Desain yang dipilih: batas ditegakkan di tingkat aplikasi.** PHP dan nginx
+sengaja dibuat longgar (20M/64M) agar berkas sampai ke kode, lalu aplikasi
+yang menolak di atas 10 MB dengan pesan berbahasa Indonesia. Keuntungannya:
+angka batas cukup diubah di satu tempat (`.env` `EULT_UPLOAD_MAX_MB`) tanpa
+menyentuh konfigurasi server.
+
+`post_max_size` (64M) sengaja jauh di atas `upload_max_filesize` (20M) karena
+multipart menambah overhead; bila sama, berkas tepat di batas bisa gagal.
+
+**Konsekuensi yang perlu diketahui:**
+
+| Ukuran berkas | Yang menolak | Pesan |
+|---|---|---|
+| ≤ 10 MB | — | lolos |
+| 10–20 MB | aplikasi | Indonesia, menyebut batas 10 MB |
+| > 20 MB | nginx (413) | halaman galat mentah nginx |
+
+Baris terakhir adalah satu-satunya celah UX: berkas > 20 MB ditolak nginx
+sebelum PHP berjalan, sehingga aplikasi tidak sempat memberi pesan ramah.
+Bila ingin ditutup, tambahkan `error_page 413` di konfigurasi nginx (perlu
+root). Untuk pemakaian normal (dokumen PDF), 20 MB sudah jauh di atas
+kebutuhan.
 
 ### Perbaikan aplikasi (sudah)
 
@@ -109,10 +132,13 @@ Berkas harus melewati tiga lapis; yang paling kecil menentukan:
 - Pesan galat berbahasa Indonesia dan menyebut angka batas
   (`eult_upload_pesan_galat()`), termasuk kasus berkas melebihi batas PHP.
 
-### Perbaikan PHP (perlu root — belum dilakukan)
+### Perbaikan PHP (sudah dilakukan)
 
-`upload_max_filesize = 2M` membuat berkas > 2 MB **ditolak PHP sebelum
-sampai ke kode aplikasi**, jadi pesan dari aplikasi tidak akan muncul.
+PHP sebelumnya `upload_max_filesize = 2M`, sehingga berkas > 2 MB **ditolak
+PHP sebelum sampai ke kode aplikasi** dan pesan dari aplikasi tidak muncul.
+
+Kini disetel **20M / 64M** di tingkat pool (bukan php.ini global), supaya
+PHP menjadi pagar longgar dan aplikasi yang menegakkan 10 MB.
 
 #### File mana yang benar?
 
@@ -121,15 +147,19 @@ Situs `eult.unmul.ac.id` dilayani **php8.5-fpm**, bukan CLI dan bukan CGI:
 ```
 nginx fastcgi_pass unix:/run/php/1792665430372593.sock
   -> /etc/php/8.5/fpm/pool.d/1792665430372593.conf  (user = eultunmul)
-  -> /etc/php/8.5/fpm/php.ini                        <- INI yang dibaca
+  -> /etc/php/8.5/fpm/php.ini                        <- nilai dasar
 ```
 
-| File | Dipakai oleh | Perlu diubah? |
+| File | Dipakai oleh | Diubah? |
 |---|---|---|
-| `/etc/php/8.5/fpm/php.ini` | **php8.5-fpm** (web) | ✅ **ya, ini yang benar** |
+| `/etc/php/8.5/fpm/pool.d/1792665430372593.conf` | **php8.5-fpm**, khusus E-ULT | ✅ **ya — di sini** |
+| `/etc/php/8.5/fpm/php.ini` | dasar untuk semua pool 8.5 | ❌ tidak (global) |
 | `/etc/php/8.5/cli/php.ini` | `php spark`, composer, cron | ❌ tidak |
 | `/etc/php/8.5/cgi/php.ini` | CGI (tidak dipakai situs ini) | ❌ tidak |
 | `/etc/php/8.4/*` | pool `antrianult` (situs antrian) | ❌ tidak |
+
+Mengubah di **pool** (bukan php.ini global) berarti hanya E-ULT yang
+terpengaruh — `ppid-ult` dan `ult` tetap memakai nilai dasar.
 
 > **Jebakan:** halaman *PHP Configuration Files* di Virtualmin hanya
 > menampilkan varian **CLI** dan **CGI**. File **FPM** tidak muncul di sana,
@@ -137,58 +167,44 @@ nginx fastcgi_pass unix:/run/php/1792665430372593.sock
 > `php spark migrate` dan sejenisnya — tidak pada unggahan lewat browser.
 >
 > Juga: `php -i` dari terminal menampilkan php.ini **CLI**, bukan FPM.
-> Untuk memeriksa nilai FPM, baca filenya langsung atau pakai `phpinfo()`
-> lewat web.
+> Untuk memeriksa nilai FPM, baca filenya langsung atau cek lewat web.
 
-#### Pilih salah satu
+#### Nilai yang terpasang
 
-**A. Virtualmin PHP Options (disarankan — per domain, tanpa edit file)**
-
-> Virtualmin → domain `eult.unmul.ac.id` → **Server Configuration →
-> PHP Options** → ubah:
-> - `Maximum allowed file size for uploads` → `10M`
-> - `Maximum HTTP POST size` → `12M` (harus ≥ upload, beri ruang header)
->
-> Simpan. Virtualmin menulisnya ke pool sebagai `php_admin_value` dan
-> me-reload FPM sendiri.
-
-**B. Edit pool FPM (per domain, tanpa menyentuh situs lain)**
-
-```bash
-sudo tee -a /etc/php/8.5/fpm/pool.d/1792665430372593.conf >/dev/null <<'EOF'
-php_admin_value[upload_max_filesize] = 10M
-php_admin_value[post_max_size] = 12M
-EOF
-sudo systemctl reload php8.5-fpm
+```
+# /etc/php/8.5/fpm/pool.d/1792665430372593.conf
+php_admin_value[upload_max_filesize] = 20M
+php_admin_value[post_max_size] = 64M
 ```
 
-**C. Edit `/etc/php/8.5/fpm/php.ini` (GLOBAL — hati-hati)**
+`php_admin_value` (bukan `php_value`) dipakai agar nilai **tidak bisa
+ditimpa** `ini_set()` dari kode aplikasi — batas ini jaminan, bukan saran.
+
+#### Verifikasi (jangan pakai `php -i`)
 
 ```bash
-sudo sed -i 's/^upload_max_filesize = 2M/upload_max_filesize = 10M/' /etc/php/8.5/fpm/php.ini
-sudo sed -i 's/^post_max_size = 8M/post_max_size = 12M/'       /etc/php/8.5/fpm/php.ini
-sudo systemctl reload php8.5-fpm
-```
-
-> Perubahan ini berlaku untuk **semua** situs di php8.5-fpm: `eult`,
-> `ppid-ult`, dan `ult`. Bila hanya E-ULT yang butuh 10 MB, pakai opsi A
-> atau B.
-
-#### Verifikasi
-
-Jangan pakai `php -i` (itu CLI). Buat file cek sementara di docroot:
-
-```bash
-cat > /home/eultunmul/public_html/_cek.php <<'EOF'
-<?php echo ini_get('upload_max_filesize'), ' / ', ini_get('post_max_size');
-EOF
+F=/home/eultunmul/public_html/_cek.php
+printf '%s\n' '<?php' \
+  'echo ini_get("upload_max_filesize"), " / ", ini_get("post_max_size"), " / ", PHP_SAPI;' > "$F"
 curl -s -H 'Host: eult.unmul.ac.id' http://192.168.55.105/_cek.php; echo
-rm -f /home/eultunmul/public_html/_cek.php
-# harus: 10M / 12M
+rm -f "$F"
+# harus: 20M / 64M / fpm-fcgi
 ```
 
-> `post_max_size` sengaja lebih besar dari `upload_max_filesize` karena
-> multipart menambah overhead; kalau sama, berkas tepat 10 MB bisa gagal.
+`PHP_SAPI` harus `fpm-fcgi` — bila `cli-server` atau `cgi-fcgi`, yang dicek
+bukan FPM-nya.
+
+**Hasil verifikasi 2026-10-30 15:53 WITA:**
+
+```
+upload_max_filesize=20M
+post_max_size=64M
+memory_limit=128M
+sapi=fpm-fcgi
+```
+
+Uji unggah nyata ke aplikasi: berkas 5 MB → `error=0` (lolos), berkas 11 MB
+→ ditolak aplikasi dengan pesan Indonesia (batas 10 MB).
 
 ## 3. Masa sesi
 

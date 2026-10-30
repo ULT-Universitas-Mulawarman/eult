@@ -73,13 +73,13 @@ class PerbaikiWaktu extends BaseCommand
 
     public function run(array $params): void
     {
-        $dryRun   = array_key_exists('dry-run', $params);
-        $batalkan = array_key_exists('batalkan', $params);
-        $since    = (string) ($params['since'] ?? '2026-10-26');
+        $dryRun   = $this->punyaOpsi($params, 'dry-run');
+        $batalkan = $this->punyaOpsi($params, 'batalkan');
+        $since    = $this->nilaiOpsi($params, 'since') ?? '2026-10-26';
         $arah     = $batalkan ? -self::GESER : self::GESER;
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $since) !== 1) {
-            CLI::error('Format --since harus YYYY-MM-DD.');
+            CLI::error('Format --since harus YYYY-MM-DD, mis. --since 2026-10-25');
 
             return;
         }
@@ -167,8 +167,51 @@ class PerbaikiWaktu extends BaseCommand
         CLI::write('Jalankan `php spark eult:waktu --dry-run` untuk memastikan sudah bersih.', 'green');
     }
 
-    private function hitung($db, string $tabel, string $kolom, string $since): int
+    /**
+     * Cek keberadaan flag, baik ditulis `--flag` maupun `--flag=nilai`.
+     *
+     * CI4::parseCommandLine() memakai ltrim($arg, '-') tanpa memisah '=',
+     * sehingga `--since=2026-10-25` menjadi key `since=2026-10-25`, BUKAN
+     * `since`. Tanpa penanganan ini, opsi berbentuk `=` diabaikan diam-diam
+     * dan perintah berjalan dengan nilai default — berbahaya untuk perintah
+     * yang mengubah data.
+     */
+    private function punyaOpsi(array $params, string $nama): bool
     {
+        if (array_key_exists($nama, $params)) {
+            return true;
+        }
+
+        foreach (array_keys($params) as $kunci) {
+            if (is_string($kunci) && str_starts_with($kunci, $nama . '=')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Ambil nilai opsi, mendukung `--opsi nilai` dan `--opsi=nilai`.
+     */
+    private function nilaiOpsi(array $params, string $nama): ?string
+    {
+        if (isset($params[$nama]) && is_string($params[$nama]) && $params[$nama] !== '') {
+            return $params[$nama];
+        }
+
+        foreach ($params as $kunci => $nilai) {
+            if (is_string($kunci) && str_starts_with($kunci, $nama . '=')) {
+                $isi = substr($kunci, strlen($nama) + 1);
+
+                return $isi !== '' ? $isi : (is_string($nilai) && $nilai !== '' ? $nilai : null);
+            }
+        }
+
+        return null;
+    }
+
+    private function hitung($db, string $tabel, string $kolom, string $since): int    {
         return $db->table($tabel)
             ->where($kolom . ' >=', $since)
             ->where($kolom . ' IS NOT NULL', null, false)

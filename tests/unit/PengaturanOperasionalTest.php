@@ -192,4 +192,65 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
             );
         }
     }
+
+    // ------------------------------------------------------- spark eult:waktu ---
+
+    /**
+     * CI4::parseCommandLine() memakai ltrim($arg, '-') tanpa memisah '=',
+     * sehingga `--since=2026-10-25` menjadi key `since=2026-10-25`, bukan
+     * `since`. Bila command hanya membaca $params['since'], opsi berbentuk
+     * `=` diabaikan diam-diam dan perintah berjalan dengan nilai default —
+     * berbahaya untuk perintah yang mengubah data produksi.
+     *
+     * @return array<string, array{array<string, string|null>, string, ?string}>
+     */
+    public static function opsiCommandProvider(): array
+    {
+        return [
+            'bentuk sama dengan (--since=...)' => [['since=2026-10-25' => null], 'since', '2026-10-25'],
+            'bentuk spasi (--since ...)'       => [['since' => '2026-10-25'], 'since', '2026-10-25'],
+            'nilai ikut sebagai value'         => [['since=2026-10-25' => '2026-10-25'], 'since', '2026-10-25'],
+            'tidak diberikan'                  => [[], 'since', null],
+            'opsi lain tidak tertukar'         => [['batalkan' => null], 'since', null],
+        ];
+    }
+
+    /**
+     * @dataProvider opsiCommandProvider
+     */
+    public function testParserOpsiCommandEultWaktu(array $params, string $nama, ?string $diharapkan): void
+    {
+        $metode = new ReflectionMethod($this->command(), 'nilaiOpsi');
+        $metode->setAccessible(true);
+
+        $this->assertSame($diharapkan, $metode->invoke($this->command(), $params, $nama));
+    }
+
+    public function testFlagCommandTerdeteksiDalamKeduaBentuk(): void
+    {
+        $metode = new ReflectionMethod($this->command(), 'punyaOpsi');
+        $metode->setAccessible(true);
+
+        $this->assertTrue($metode->invoke($this->command(), ['dry-run' => null], 'dry-run'));
+        $this->assertTrue($metode->invoke($this->command(), ['dry-run=true' => null], 'dry-run'));
+        $this->assertFalse($metode->invoke($this->command(), [], 'dry-run'));
+        $this->assertFalse($metode->invoke($this->command(), ['batalkan' => null], 'dry-run'));
+    }
+
+    public function testCommandTerdaftarDiSpark(): void
+    {
+        $this->assertTrue(
+            class_exists(\App\Commands\PerbaikiWaktu::class),
+            'Perintah eult:waktu harus ada agar koreksi data bisa dijalankan.',
+        );
+    }
+
+    /**
+     * BaseCommand butuh LoggerInterface + Commands; ambil dari service agar
+     * tes tidak perlu meniru konstruksi CLI.
+     */
+    private function command(): \App\Commands\PerbaikiWaktu
+    {
+        return new \App\Commands\PerbaikiWaktu(service('logger'), service('commands'));
+    }
 }

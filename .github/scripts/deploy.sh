@@ -151,12 +151,24 @@ sync_git_metadata() {
     git -C "$SOURCE" rev-parse --git-dir >/dev/null 2>&1 \
         || { warn "Sumber bukan repo git; metadata git produksi dilewati"; return 0; }
 
-    local sha branch err
+    local sha branch err shallow
     sha=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null) || return 0
     branch=$(git -C "$TARGET" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch="main"
     [ "$branch" = "HEAD" ] && branch="main"
 
-    if ! err=$(git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>&1); then
+    # Repo produksi bisa berupa shallow clone (mis. `git clone --depth 1`).
+    # Pada clone shallow, `fetch HEAD` hanya membawa satu commit tanpa parent,
+    # sehingga `git log`/`git status` gagal ("Could not read <parent>").
+    # Karena itu shallow di-unshallow lebih dulu; history repo ini kecil.
+    shallow=$(git -C "$TARGET" rev-parse --is-shallow-repository 2>/dev/null || echo false)
+    if [ "$shallow" = "true" ]; then
+        log "Repo produksi shallow — mengambil history lengkap"
+        if ! err=$(git -C "$TARGET" fetch --quiet --no-tags --unshallow "$SOURCE" HEAD 2>&1); then
+            warn "unshallow gagal; metadata git dilewati"
+            [ -n "$err" ] && warn "  $err"
+            return 0
+        fi
+    elif ! err=$(git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>&1); then
         warn "fetch objek git dari workspace gagal; metadata git dilewati"
         [ -n "$err" ] && warn "  $err"
         return 0

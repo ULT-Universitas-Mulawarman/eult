@@ -47,6 +47,34 @@ if (! function_exists('eult_upload_max_mb')) {
     }
 }
 
+if (! function_exists('eult_upload_melebihi_batas')) {
+    /**
+     * Apakah ukuran berkas melebihi batas.
+     *
+     * JANGAN membandingkan hasil getSizeByUnit('kb') dengan angka: method itu
+     * mengembalikan STRING berformat number_format(), mis. "5,263.00". String
+     * dengan koma BUKAN numerik, sehingga PHP 8 membandingkannya sebagai teks:
+     *
+     *     "5,263.00" > 10240   -> true   (karena '5' > '1')
+     *     "1,536.00" > 10240   -> false  (karena ',' < '0')
+     *
+     * Akibatnya berkas 2-10 MB salah ditolak, sementara 1-2 MB lolos.
+     * Perbandingan di sini memakai BYTE (integer) dari getSize(), jadi bebas
+     * masalah format angka. getSizeByUnit() juga sudah deprecated sejak 4.6.
+     *
+     * @param int $ukuranByte Ukuran berkas dalam byte ($berkas->getSize()).
+     * @param int $batasKb    Batas dalam KB (mis. eult_upload_max_kb()).
+     */
+    function eult_upload_melebihi_batas(int $ukuranByte, int $batasKb): bool
+    {
+        if ($batasKb <= 0) {
+            return false;
+        }
+
+        return $ukuranByte > $batasKb * 1024;
+    }
+}
+
 if (! function_exists('eult_upload_pesan_galat')) {
     /**
      * Pesan galat unggahan dalam bahasa Indonesia.
@@ -110,8 +138,10 @@ if (! function_exists('eult_upload_ticket')) {
             eult_message_kirim('Isi file tidak cocok dengan tipe ' . strtoupper($ekstensi) . '.', 'error');
         }
 
-        // Validasi ukuran (CI3 max_size dalam KB)
-        if ($berkas->getSizeByUnit('kb') > $konfig['size']) {
+        // Validasi ukuran (CI3 max_size dalam KB).
+        // Bandingkan BYTE, bukan getSizeByUnit('kb') yang mengembalikan string
+        // berformat "5,263.00" dan membuat perbandingan jadi perbandingan teks.
+        if (eult_upload_melebihi_batas((int) $berkas->getSize(), (int) $konfig['size'])) {
             eult_message_kirim('Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.', 'error');
         }
 
@@ -192,7 +222,9 @@ if (! function_exists('eult_upload_custom')) {
             eult_message_kirim('Isi file tidak cocok dengan tipe ' . strtoupper($ekstensi) . '.', 'error');
         }
 
-        if ($berkas->getSizeByUnit('kb') > $konfig['size']) {
+        // Bandingkan BYTE, bukan getSizeByUnit('kb') (lihat catatan di
+        // eult_upload_melebihi_batas).
+        if (eult_upload_melebihi_batas((int) $berkas->getSize(), (int) $konfig['size'])) {
             eult_message_kirim('Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.', 'error');
         }
 

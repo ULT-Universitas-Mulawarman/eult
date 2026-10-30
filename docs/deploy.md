@@ -1,107 +1,67 @@
 # Deploy E-ULT (CI/CD self-hosted runner)
 
-Panduan ini menjelaskan alur CI/CD yang berjalan di server produksi sendiri
-(self-hosted runner), bukan di mesin GitHub.
+Pipeline CI/CD berjalan di **self-hosted runner** yang terpasang langsung di
+server produksi. Tidak ada server CI terpisah dan tidak ada kredensial deploy
+yang disimpan di GitHub — runner sudah berada di mesin tujuan.
 
-## Ringkasan alur
+## Kondisi server (terverifikasi 2026-10-30)
+
+| Item | Nilai |
+|---|---|
+| Host | `ulthost.unmul.ac.id` (VM KVM, Sangfor aCloud) |
+| OS | Debian GNU/Linux 13 (trixie), kernel 6.12 |
+| CPU / RAM / Disk | 8 vCPU / 15 GiB / 279 GB (121 GB bebas) |
+| Web server | nginx + Virtualmin, site `eult.unmul.ac.id` |
+| PHP | 8.5.12 (CLI `/usr/bin/php8.5`, FPM `php8.5-fpm.service`) |
+| Pool FPM | `eultunmul` → socket `/run/php/1792665430372593.sock` |
+| Database | MariaDB 11.8.8 |
+| Runner | `ulthost`, grup `ult`, label `self-hosted`, `Linux`, `X64`, `eult` |
+| Work folder | `eult-project` → `/home/eultunmul/apps/actions-runner/eult-project` |
+| Direktori aplikasi | `/home/eultunmul/apps/eult` (milik `eultunmul`, mode 775) |
+| Web root | `/home/eultunmul/public_html` (symlink ke `apps/eult/public/*`) |
+| `.env` produksi | `/home/eultunmul/apps/eult/.env` (mode 664, tidak di-track) |
+
+Karena runner berjalan sebagai `eultunmul` — pemilik direktori aplikasi —
+**deploy tidak memerlukan sudo**.
+
+## Alur
 
 | Workflow | Runner | Pemicu | Tugas |
 |---|---|---|---|
-| `tests.yml` | GitHub-hosted (`ubuntu-latest`) | PR + push | Matriks PHP 8.2 & 8.3 — penjaga kompatibilitas |
-| `deploy.yml` → job `verify` | self-hosted (`self-hosted`, `eult`) | push `main` + manual | Lint, audit CVE, unit test dengan PHP server |
-| `deploy.yml` → job `deploy` | self-hosted (`self-hosted`, `eult`) | push `main` + manual | Backup → rsync → migrate → reload → health check |
+| `tests.yml` | GitHub-hosted | PR + push | Matriks PHP 8.2 & 8.3 — penjaga kompatibilitas minimum |
+| `deploy.yml` → `Verifikasi` | self-hosted | PR + push `main` | Ekstensi PHP, `composer validate`, audit CVE, lint, unit test |
+| `deploy.yml` → `Deploy produksi` | self-hosted | push `main` + manual | Backup → rsync → cache clear → health check |
+| `rehearsal.yml` | self-hosted | manual | Latihan penuh ke salinan produksi, termasuk uji rollback |
 
-`deploy` hanya jalan bila `verify` hijau dan ref-nya `main`. PR tidak pernah
-menyentuh produksi.
+Job `Deploy produksi` hanya berjalan bila `Verifikasi` hijau **dan** ref-nya
+`main`. Pull request tidak pernah menyentuh produksi.
 
-## Prasyarat server (Debian 13 trixie)
+## Apa yang dilakukan `deploy.sh`
 
-Runner sudah terdaftar dengan label `self-hosted`, `Linux`, `X64`, `eult`
-dan work folder `eult-project`. Yang perlu dipastikan ada di server:
+1. **Preflight** — direktori tujuan ada, `.env` produksi ada, `public/index.php`
+   ada, user runner bisa menulis ke direktori tujuan.
+2. **Backup** — `tar.gz` kode lama ke `/home/eultunmul/apps/eult-backups/`
+   (tanpa `writable/` dan `.git/`), menyimpan 5 arsip terakhir.
+3. **Rsync** — sinkron dari workspace runner ke direktori produksi dengan
+   `--delete`, mengecualikan:
+   - `/.env` → konfigurasi server tidak pernah tertimpa
+   - `/writable/` → log, session, upload tidak pernah terhapus
+   - `/.git/`, `/.github/`, `/build/`, `/phpunit.xml`, `/vendor/mpdf/mpdf/tmp/`
 
-```bash
-# PHP CLI + ekstensi yang dipakai aplikasi dan test
-sudo apt install -y php-cli php-intl php-mbstring php-gd php-mysql \
-                    php-curl php-zip php-xml php-sqlite3
+   Pola diawali `/` supaya hanya cocok di root — tanpa itu, `/.github/` juga
+   mengenai `vendor/*/.github/` dan rsync gagal menghapus direktori vendor.
 
-# Alat bantu deploy
-sudo apt install -y rsync unzip curl git
+4. **Writable** — memastikan `cache/ logs/ session/ uploads/ debugbar/` ada
+   (dibuat bila belum, tidak pernah dihapus).
+5. **Migrasi** — hanya bila `DEPLOY_MIGRATE=true` (lihat bagian Migrasi).
+6. **Cache** — `php spark cache:clear`.
+7. **Health check** — HTTP ke nginx dengan header `Host: eult.unmul.ac.id`,
+   10 percobaan × 3 detik. Lalu smoke test `php spark routes`.
+8. **Rollback otomatis** — bila langkah 3–7 gagal, arsip backup diekstrak
+   kembali ke direktori produksi.
 
-# Composer (bila belum ada)
-curl -sS https://getcomposer.org/installer | php
-sudo mv composer.phar /usr/local/bin/composer
-```
-
-Cek cepat:
-
-```bash
-php -v
-php -m | grep -E 'intl|mbstring|gd|mysqli|curl|zip'
-composer --version
-rsync --version | head -1
-```
-
-## Izin direktori
-
-Runner harus bisa menulis ke direktori produksi
-(`/home/eultunmul/apps/eult`) **atau** punya sudo tanpa password.
-
-Opsi paling sederhana — jalankan runner sebagai pemilik direktori:
-
-```bash
-# pemilik aplikasi
-stat -c '%U:%G' /home/eultunmul/apps/eult
-
-# jalankan service runner sebagai user tersebut
-sudo systemctl edit actions.runner.<org>-<repo>.<runner-name>.service
-```
-
-Tambahkan:
-
-```ini
-[Service]
-User=eultunmul
-Group=eultunmul
-```
-
-lalu:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart actions.runner.<org>-<repo>.<runner-name>.service
-```
-
-Bila runner harus tetap memakai user lain, berikan sudo terbatas:
-
-```bash
-echo 'runner ALL=(ALL) NOPASSWD: /usr/bin/rsync, /usr/bin/tar, /usr/bin/systemctl, /usr/bin/chown, /usr/bin/mkdir, /usr/bin/php' \
-  | sudo tee /etc/sudoers.d/eult-deploy
-sudo chmod 0440 /etc/sudoers.d/eult-deploy
-```
-
-## Pastikan runner melayani repo ini
-
-Runner terdaftar di **level organisasi** (runner group `ult`). Agar job dari
-repo ini bisa memakainya, runner group harus diberi akses ke repository
-`ULT-Universitas-Mulawarman/eult`:
-
-> Organization **Settings → Actions → Runner groups → `ult` →
-> Repository access** → pilih *Selected repositories* → tambahkan
-> `eult` (atau pilih *All repositories*).
-
-Cek dari sisi server:
-
-```bash
-# service runner harus active (running)
-sudo systemctl status 'actions.runner.*' --no-pager
-
-# log listener — harus muncul "Listening for Jobs"
-sudo journalctl -u 'actions.runner.*' -n 30 --no-pager
-```
-
-Bila job berstatus **queued** lebih dari satu menit, hampir selalu karena
-salah satu dari dua hal di atas: runner group belum memberi akses ke repo,
-atau service runner mati.
+Tidak diperlukan reload php-fpm: `opcache.validate_timestamps=On` dengan
+`revalidate_freq=2`, jadi PHP otomatis memuat ulang file yang berubah.
 
 ## Variabel repository (opsional)
 
@@ -109,55 +69,63 @@ atau service runner mati.
 
 | Variabel | Default | Keterangan |
 |---|---|---|
-| `DEPLOY_PATH` | `/home/eultunmul/apps/eult` | Direktori aplikasi produksi |
-| `DEPLOY_HEALTHCHECK_URL` | *(kosong)* | URL yang di-curl setelah deploy. Bila kosong, dipakai smoke test `php spark routes` |
-| `DEPLOY_KEEP_BACKUPS` | `5` | Jumlah arsip backup yang disimpan |
+| `DEPLOY_PATH` | `/home/eultunmul/apps/eult` | Direktori aplikasi |
+| `DEPLOY_HEALTHCHECK_URL` | `http://192.168.55.105/` | URL yang di-curl dari server |
+| `DEPLOY_HEALTHCHECK_HOST` | `eult.unmul.ac.id` | Header `Host` untuk health check |
+| `DEPLOY_MIGRATE` | `false` | Jalankan `php spark migrate` saat deploy |
+| `DEPLOY_KEEP_BACKUPS` | `5` | Jumlah arsip backup disimpan |
 
-Sangat disarankan mengisi `DEPLOY_HEALTHCHECK_URL` (mis. `https://eult.unmul.ac.id/`)
-supaya deploy benar-benar terbukti melayani request, bukan hanya lolos boot CLI.
+> Health check memakai IP + header `Host` karena `https://eult.unmul.ac.id`
+> tidak dapat di-resolve dari dalam server itu sendiri (DNS hairpin).
 
-## Apa yang dilakukan `deploy.sh`
+## Migrasi database — status saat ini
 
-1. **Preflight** — memastikan direktori tujuan ada, `.env` produksi ada, dan
-   `public/index.php` ada. Deploy dibatalkan bila `.env` hilang.
-2. **Backup** — `tar.gz` kode lama ke `<parent>/eult-backups/eult-<timestamp>.tar.gz`
-   (tanpa `writable/`), simpan `DEPLOY_KEEP_BACKUPS` terakhir.
-3. **Rsync** — sinkron dari workspace runner ke direktori produksi dengan
-   `--delete`, tetapi mengecualikan:
-   - `.env` → konfigurasi server tidak pernah tertimpa
-   - `writable/` → log, session, upload tidak pernah terhapus
-   - `tests/`, `docs/`, `.git/`, `.github/`, `build/`, `phpunit*.xml`
-4. **Permission** — `writable/` di-`chown` ke user web server dan diberi `g+w`.
-5. **Migrasi** — `php spark migrate` (hanya migrasi yang belum jalan).
-6. **Cache** — `php spark cache:clear`.
-7. **Reload** — `systemctl reload <php-fpm>` untuk reset OPcache.
-8. **Health check** — HTTP ke `DEPLOY_HEALTHCHECK_URL` (10 percobaan × 3 detik)
-   atau smoke test CLI bila URL kosong.
-9. **Rollback otomatis** — bila langkah 3–8 gagal, arsip backup diekstrak
-   kembali ke direktori produksi dan php-fpm di-reload.
+**Migrasi belum dapat dijalankan otomatis.** Dua hambatan di server:
+
+1. User DB `eult_app` belum punya izin `CREATE`/`ALTER`:
+   ```
+   CREATE command denied to user 'eult_app'@'localhost' for table `db_eultunmul`.`migrations`
+   ```
+2. Tabel `migrations` belum pernah dibuat, sehingga `php spark migrate` gagal
+   sebelum sempat menjalankan migrasi apa pun.
+
+Karena itu `DEPLOY_MIGRATE=false` secara default dan deploy hanya memperingatkan.
+Kode aplikasi sudah defensif: `Ticketing::simpanRating()` dan
+`Cektiket::simpanRating()` memeriksa `getFieldNames('d_rating')` sebelum menulis
+kolom `ratingKeterangan`, jadi fitur itu otomatis nonaktif sampai kolomnya ada.
+
+Untuk mengaktifkan migrasi otomatis, minta DBA menjalankan:
+
+```sql
+GRANT CREATE, ALTER, INDEX, DROP, REFERENCES
+  ON db_eultunmul.* TO 'eult_app'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+lalu set variabel repo `DEPLOY_MIGRATE=true`. Migrasi
+`2026-10-28-223816_AddRatingKeterangan` bersifat idempoten (memeriksa
+`tableExists` dan `getFieldNames` sebelum `addColumn`), jadi aman diulang.
 
 ## Rollback manual
 
 ```bash
 ls -1t /home/eultunmul/apps/eult-backups/*.tar.gz | head
-tar -xzf /home/eultunmul/apps/eult-backups/eult-20261030-120000.tar.gz \
+tar -xzf /home/eultunmul/apps/eult-backups/eult-20261030-115850.tar.gz \
     -C /home/eultunmul/apps/eult
-sudo systemctl reload php*-fpm
 ```
 
-Catatan: migrasi database **tidak** di-rollback otomatis. Bila rilis berisi
-migrasi yang mengubah skema, siapkan `php spark migrate:rollback` manual.
+Migrasi database tidak ikut di-rollback. Bila rilis berisi migrasi yang
+mengubah skema, siapkan `php spark migrate:rollback` manual.
 
 ## Deploy manual / dry run
 
-Dari tab **Actions → Deploy → Run workflow**:
+**Actions → Deploy → Run workflow**, centang `dry_run` untuk berhenti sebelum
+menyentuh produksi.
 
-- `dry_run` dicentang → hanya verifikasi, berhenti sebelum menyentuh produksi.
-
-Atau langsung di server:
+Atau langsung di server, dari direktori workspace runner:
 
 ```bash
-cd /path/ke/workspace/runner
+cd /home/eultunmul/apps/actions-runner/eult-project/eult/eult
 GITHUB_WORKSPACE="$PWD" DEPLOY_DRY_RUN=true bash .github/scripts/deploy.sh
 ```
 
@@ -165,9 +133,9 @@ GITHUB_WORKSPACE="$PWD" DEPLOY_DRY_RUN=true bash .github/scripts/deploy.sh
 
 | Gejala | Penyebab umum | Tindakan |
 |---|---|---|
-| Job `queued` terus | Runner group tidak memberi akses ke repo, atau service mati | Lihat bagian "Pastikan runner melayani repo ini" |
-| `Ekstensi PHP belum terpasang` | Paket PHP kurang | `sudo apt install php-{intl,mbstring,gd,mysql,curl,zip,xml}` |
-| `Tidak punya izin tulis` | Runner bukan pemilik direktori dan tanpa sudo | Jalankan runner sebagai `eultunmul` atau pasang sudoers |
-| `Health check gagal` | php-fpm belum reload / `.env` salah / app error | Cek `writable/logs/log-<tanggal>.log` |
-| `Migrasi database gagal` | Kredensial `.env` salah / DB mati | `php spark migrate:status` di direktori produksi |
-| Deploy sukses tapi halaman 500 | OPcache / permission `writable/` | `sudo systemctl reload php*-fpm`, cek `chown` |
+| Job `queued` terus | Service runner mati, atau runner group `ult` belum diberi akses ke repo | `sudo systemctl status 'actions.runner.*'`; cek Organization → Actions → Runner groups → `ult` → Repository access |
+| `Ekstensi PHP belum terpasang` | Paket PHP kurang | `sudo apt install php8.5-{intl,mbstring,gd,mysql,curl,zip,xml}` |
+| `Tidak bisa menulis ke ...` | Runner bukan `eultunmul` | Jalankan service runner sebagai `eultunmul` |
+| `Health check gagal` | nginx mati / `.env` salah / app error | `tail writable/logs/log-<tanggal>.log`, `curl -H 'Host: eult.unmul.ac.id' http://192.168.55.105/` |
+| Deploy sukses tapi halaman 500 | permission `writable/` | `chmod -R ug+rwX writable/`, cek log |
+| `Migrasi database gagal` | Izin DB kurang | Lihat bagian Migrasi di atas |

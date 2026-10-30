@@ -303,4 +303,36 @@ final class AlurSimpanTiketTest extends CIUnitTestCase
         $this->assertStringContainsString('eult:arsip', $isi, 'Job harus memakai perintah eult:arsip.');
         $this->assertStringContainsString('--dry-run', $isi, 'Job tidak boleh mengubah data.');
     }
+
+    public function testWorkflowRegresiMembatasiSejakPerbaikan(): void
+    {
+        // Tanpa --sejak, tumpukan 4.156 tiket lama membuat job merah setiap
+        // hari — itu alert fatigue, bukan deteksi regresi.
+        $isi = (string) file_get_contents(ROOTPATH . '.github/workflows/regresi-data.yml');
+
+        $this->assertStringContainsString(
+            '--sejak=',
+            $isi,
+            'Job regresi harus membatasi hitungan sejak tanggal perbaikan.',
+        );
+    }
+
+    public function testCommandMendukungOpsiSejak(): void
+    {
+        $isi = $this->baca('app/Commands/TinjauArsipHilang.php');
+
+        $this->assertStringContainsString("'--sejak'", $isi, 'Perintah harus mendeklarasikan opsi --sejak.');
+        $this->assertStringContainsString(
+            'Format --sejak harus YYYY-MM-DD',
+            $isi,
+            'Format tanggal salah harus ditolak dengan pesan jelas.',
+        );
+
+        // Nilai --sejak harus di-escape sebelum masuk SQL.
+        $this->assertStringContainsString(
+            '$db->escape($sejak',
+            $isi,
+            'Nilai --sejak harus di-escape sebelum masuk query.',
+        );
+    }
 }

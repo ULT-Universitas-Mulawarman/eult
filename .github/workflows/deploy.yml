@@ -1,16 +1,22 @@
 name: Deploy
 
-# CI/CD di self-hosted runner (label: self-hosted, eult).
-# Alur: verifikasi -> deploy ke /home/eultunmul/apps/eult -> health check.
-# Bila deploy gagal, .github/scripts/deploy.sh otomatis rollback dari backup.
+# CI/CD di self-hosted runner (label: self-hosted, eult) — server produksi
+# Debian 13 trixie, nginx + php8.5-fpm (Virtualmin), user runner `eultunmul`.
 #
-# Konfigurasi opsional (Settings > Secrets and variables > Actions > Variables):
-#   DEPLOY_PATH             default /home/eultunmul/apps/eult
-#   DEPLOY_HEALTHCHECK_URL  URL publik untuk dicek setelah deploy
-#   DEPLOY_KEEP_BACKUPS     jumlah backup yang disimpan (default 5)
+# Alur: verify (lint, audit, unit test) -> deploy -> health check.
+# Deploy hanya pada push ke main; PR hanya menjalankan verify.
+#
+# Variabel opsional (Settings > Secrets and variables > Actions > Variables):
+#   DEPLOY_PATH              default /home/eultunmul/apps/eult
+#   DEPLOY_HEALTHCHECK_URL   default http://192.168.55.105/
+#   DEPLOY_HEALTHCHECK_HOST  default eult.unmul.ac.id
+#   DEPLOY_MIGRATE           default false (lihat docs/deploy.md)
+#   DEPLOY_KEEP_BACKUPS      default 5
 
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -28,7 +34,9 @@ permissions:
 
 env:
   DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/eultunmul/apps/eult' }}
-  DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+  DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL || 'http://192.168.55.105/' }}
+  DEPLOY_HEALTHCHECK_HOST: ${{ vars.DEPLOY_HEALTHCHECK_HOST || 'eult.unmul.ac.id' }}
+  DEPLOY_MIGRATE: ${{ vars.DEPLOY_MIGRATE || 'false' }}
   DEPLOY_KEEP_BACKUPS: ${{ vars.DEPLOY_KEEP_BACKUPS || '5' }}
 
 jobs:
@@ -40,8 +48,9 @@ jobs:
 
       - name: Info lingkungan
         run: |
-          php -v | head -1
-          composer --version | head -1
+          echo "PHP      : $(php -r 'echo PHP_VERSION;')"
+          echo "Composer : $(composer --version 2>/dev/null | head -1)"
+          echo "Runner   : ${RUNNER_NAME}"
 
       - name: Cek ekstensi PHP wajib
         run: |
@@ -51,7 +60,6 @@ jobs:
           done
           if [ -n "$missing" ]; then
             echo "::error::Ekstensi PHP belum terpasang:$missing"
-            echo "Pasang dengan: sudo apt install php-{intl,mbstring,gd,mysql,curl,zip,xml}"
             exit 1
           fi
           echo "Semua ekstensi wajib tersedia."
@@ -74,11 +82,11 @@ jobs:
   deploy:
     name: Deploy produksi
     needs: verify
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, eult]
     environment:
       name: production
-      url: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+      url: ${{ vars.DEPLOY_HEALTHCHECK_URL || 'http://192.168.55.105/' }}
     steps:
       - uses: actions/checkout@v4
 

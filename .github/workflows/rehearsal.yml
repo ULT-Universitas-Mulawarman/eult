@@ -54,12 +54,24 @@ jobs:
           test -f "$SIM/.env" && echo "ENV_OK" || { echo "::error::.env hilang"; exit 1; }
           echo "== writable masih ada =="
           test -d "$SIM/writable/logs" && echo "WRITABLE_OK" || { echo "::error::writable hilang"; exit 1; }
-          echo "== .github tidak ikut tersinkron =="
+          echo "== .github root tidak ikut tersinkron =="
           test -e "$SIM/.github/scripts/deploy.sh" \
             && { echo "::error::.github ikut tersinkron"; exit 1; } || echo "GITHUB_EXCLUDED_OK"
+          echo "== .github milik paket vendor TETAP ada =="
+          test -d "$SIM/vendor/phar-io/manifest/.github" \
+            && echo "VENDOR_GITHUB_OK" || echo "VENDOR_GITHUB_HILANG (cek exclude)"
           echo "== kode aplikasi tersinkron =="
           test -f "$SIM/app/Controllers/Ticketing.php" && echo "APP_OK"
           echo "== ukuran akhir =="; du -sh "$SIM"
+
+      - name: Uji jalur sukses penuh (health check nyata)
+        run: |
+          # Health check ke nginx sungguhan, lalu smoke test `php spark routes`.
+          DEPLOY_PATH="$SIM" DEPLOY_BACKUP_DIR="$SIM_BACKUP" \
+          DEPLOY_HEALTHCHECK_URL=http://192.168.55.105/ \
+          DEPLOY_HEALTHCHECK_HOST=eult.unmul.ac.id \
+          DEPLOY_DRY_RUN=false \
+          bash .github/scripts/deploy.sh
 
       - name: Uji rollback
         run: |

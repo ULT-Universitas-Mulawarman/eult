@@ -92,18 +92,36 @@ trap rollback ERR
 log "Menyinkronkan kode ke produksi"
 # Exclude yang dilindungi rsync: .env (konfigurasi server) dan writable/ (data
 # runtime) tidak pernah ditimpa maupun dihapus oleh --delete.
+#
+# PENTING: pola diawali '/' agar hanya cocok di ROOT transfer. Tanpa itu,
+# exclude '.github/' juga mengenai 'vendor/phar-io/manifest/.github/' dan
+# membuat rsync gagal menghapus direktori vendor ("cannot delete non-empty
+# directory"), sehingga paket dev tertinggal di produksi.
 rsync -a --delete --delay-updates --itemize-changes \
-    --exclude='.git/' \
-    --exclude='.github/' \
-    --exclude='.env' \
-    --exclude='writable/' \
-    --exclude='build/' \
-    --exclude='node_modules/' \
-    --exclude='.idea/' \
-    --exclude='.vscode/' \
-    --exclude='phpunit.xml' \
-    --exclude='.phpunit.cache/' \
-    "$SOURCE"/ "$TARGET"/ | sed 's/^/    /'
+    --exclude='/.git/' \
+    --exclude='/.github/' \
+    --exclude='/.env' \
+    --exclude='/writable/' \
+    --exclude='/build/' \
+    --exclude='/node_modules/' \
+    --exclude='/.idea/' \
+    --exclude='/.vscode/' \
+    --exclude='/phpunit.xml' \
+    --exclude='/.phpunit.cache/' \
+    "$SOURCE"/ "$TARGET"/ > /tmp/eult-rsync.log 2>&1 || true
+
+# Tampilkan ringkasan, bukan ribuan baris perubahan vendor.
+changed=$(grep -c '^[<>ch]' /tmp/eult-rsync.log 2>/dev/null || echo 0)
+log "  $changed entri berubah/dihapus"
+grep -E '^(deleting|\*deleting)' /tmp/eult-rsync.log | head -20 | sed 's/^/    /' || true
+grep -iE 'cannot delete|error|failed' /tmp/eult-rsync.log | head -10 | sed 's/^/    /' || true
+rm -f /tmp/eult-rsync.log
+
+# rsync exit 24 = "some files vanished" (bukan kegagalan). Kegagalan nyata
+# sudah tertangkap oleh pemeriksaan di bawah: file inti harus ada.
+[ -f "$TARGET/public/index.php" ] || die "Sinkronisasi gagal: public/index.php hilang"
+[ -f "$TARGET/spark" ]            || die "Sinkronisasi gagal: spark hilang"
+[ -d "$TARGET/vendor" ]           || die "Sinkronisasi gagal: vendor/ hilang"
 
 # Pastikan struktur writable/ lengkap (dibuat bila belum ada, tidak dihapus).
 for d in cache logs session uploads debugbar; do

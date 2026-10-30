@@ -1,0 +1,48 @@
+name: Probe Uji Arsip
+
+# Probe sementara (READ-ONLY): uji perintah eult:arsip di produksi.
+# Hanya --dry-run dan --csv ke /tmp. Tidak menghapus apa pun.
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  uji:
+    name: Uji eult:arsip
+    runs-on: [self-hosted, eult]
+    steps:
+      - name: Perintah terpasang
+        run: |
+          cd /home/eultunmul/apps/eult
+          php spark list 2>&1 | grep -E 'eult:' || echo "(belum ada)"
+
+      - name: Dry-run ringkasan
+        run: |
+          cd /home/eultunmul/apps/eult
+          php spark eult:arsip --dry-run 2>&1 | head -40
+
+      - name: Ekspor CSV
+        run: |
+          cd /home/eultunmul/apps/eult
+          php spark eult:arsip --csv=/tmp/kandidat-arsip.csv --semua 2>&1 | tail -5
+          echo "== ukuran & contoh =="
+          wc -l /tmp/kandidat-arsip.csv 2>/dev/null
+          head -4 /tmp/kandidat-arsip.csv 2>/dev/null
+
+      - name: Pastikan tidak ada yang terhapus
+        run: |
+          cd /home/eultunmul/apps/eult
+          get() {
+            local v
+            v=$(grep -E "^$1[[:space:]]*=" .env | head -1 | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]+$//')
+            v=${v%\"}; v=${v#\"}; v=${v%\'}; v=${v#\'}
+            printf '%s' "$v"
+          }
+          H=$(get EULT_DB_HOST); U=$(get EULT_DB_USER)
+          P=$(get EULT_DB_PASS); D=$(get EULT_DB_NAME)
+          mysql -h "$H" -u "$U" -p"$P" -D "$D" -e \
+            "SELECT COUNT(*) AS total_tiket FROM d_ticketing;" 2>&1
+
+      - name: Bersihkan
+        if: always()
+        run: rm -f /tmp/kandidat-arsip.csv

@@ -63,6 +63,42 @@ Job `Deploy produksi` hanya berjalan bila `Verifikasi` hijau **dan** ref-nya
 Tidak diperlukan reload php-fpm: `opcache.validate_timestamps=On` dengan
 `revalidate_freq=2`, jadi PHP otomatis memuat ulang file yang berubah.
 
+## Deploy **tidak** memakai `git pull` di produksi
+
+Ini penyebab kebingungan yang paling sering. Alurnya:
+
+```
+push ke main
+   → runner checkout repo ke workspace-nya sendiri
+     /home/eultunmul/apps/actions-runner/eult-project/eult/eult
+   → deploy.sh rsync workspace itu ke /home/eultunmul/apps/eult
+```
+
+Direktori produksi **bukan** working copy yang di-`git pull`. Karena itu:
+
+- **Jangan jalankan `git pull` di `/home/eultunmul/apps/eult`.** Isinya sudah
+  diperbarui oleh rsync. `git pull` di sana akan gagal dengan pesan
+  `local changes would be overwritten` — bukan karena ada masalah, tapi karena
+  HEAD git di produksi tertinggal di belakang isi file.
+- `git pull` juga meminta passphrase SSH key `id_ed25519`. Passphrase itu tidak
+  relevan untuk CI/CD: runner memakai `GITHUB_TOKEN` saat checkout, dan deploy
+  tidak pernah membuka koneksi git ke GitHub.
+
+Sejak versi ini, `deploy.sh` menyamakan metadata git produksi secara otomatis
+(`git fetch` dari workspace lokal + `git reset --hard`, tanpa jaringan dan tanpa
+kredensial), sehingga `git log` dan `git status` di produksi kembali akurat.
+`.env`, `writable/`, dan `vendor/` di-gitignore sehingga tidak tersentuh.
+
+Kalau `git pull` di produksi terlanjur gagal, cukup jalankan sekali:
+
+```bash
+cd /home/eultunmul/apps/eult
+git fetch origin main
+git reset --hard origin/main
+```
+
+atau biarkan deploy berikutnya yang merapikannya sendiri.
+
 ## Variabel repository (opsional)
 
 **Settings → Secrets and variables → Actions → Variables**:

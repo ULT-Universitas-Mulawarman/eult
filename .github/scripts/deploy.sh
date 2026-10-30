@@ -124,6 +124,40 @@ rm -f /tmp/eult-rsync.log
 [ -f "$TARGET/spark" ]            || die "Sinkronisasi gagal: spark hilang"
 [ -d "$TARGET/vendor" ]           || die "Sinkronisasi gagal: vendor/ hilang"
 
+# ------------------------------------------------------- metadata git target ---
+#
+# Deploy memakai rsync, BUKAN `git pull` di direktori produksi. Akibatnya HEAD
+# git di produksi tertinggal, dan `git status`/`git pull` di sana menampilkan
+# "local changes would be overwritten" padahal isinya sudah benar.
+#
+# Di sini metadata git disamakan dengan commit yang baru di-deploy. Objeknya
+# diambil dari workspace runner (path lokal) sehingga tidak butuh jaringan,
+# SSH key, maupun passphrase.
+#
+# Aman: .env, writable/, dan vendor/ di-gitignore, jadi `reset --hard` tidak
+# menyentuhnya. Kegagalan di sini hanya diperingatkan, tidak menggagalkan deploy.
+sync_git_metadata() {
+    [ -d "$TARGET/.git" ] || return 0
+    command -v git >/dev/null 2>&1 || { warn "git tidak ada; metadata git produksi dilewati"; return 0; }
+    git -C "$SOURCE" rev-parse --git-dir >/dev/null 2>&1 \
+        || { warn "Sumber bukan repo git; metadata git produksi dilewati"; return 0; }
+
+    local sha
+    sha=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null) || return 0
+
+    if ! git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>/dev/null; then
+        warn "fetch objek git dari workspace gagal; metadata git produksi dilewati"
+        return 0
+    fi
+
+    if git -C "$TARGET" reset --hard --quiet FETCH_HEAD 2>/dev/null; then
+        log "Git produksi disinkronkan ke ${sha:0:7}"
+    else
+        warn "reset --hard git produksi gagal (kode tetap ter-deploy)"
+    fi
+}
+sync_git_metadata
+
 # Pastikan struktur writable/ lengkap (dibuat bila belum ada, tidak dihapus).
 for d in cache logs session uploads debugbar; do
     mkdir -p "$TARGET/writable/$d"

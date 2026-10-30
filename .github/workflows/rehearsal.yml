@@ -53,15 +53,28 @@ jobs:
           test -f "$SIM/.env" && echo "ENV_OK" || { echo "::error::.env hilang"; exit 1; }
           echo "== writable masih ada =="
           test -d "$SIM/writable/logs" && echo "WRITABLE_OK" || { echo "::error::writable hilang"; exit 1; }
-          echo "== .github root tidak ikut tersinkron =="
-          test -e "$SIM/.github/scripts/deploy.sh" \
-            && { echo "::error::.github ikut tersinkron"; exit 1; } || echo "GITHUB_EXCLUDED_OK"
-          echo "== .github milik paket vendor TETAP ada =="
-          test -d "$SIM/vendor/phar-io/manifest/.github" \
-            && echo "VENDOR_GITHUB_OK" || echo "VENDOR_GITHUB_HILANG (cek exclude)"
           echo "== kode aplikasi tersinkron =="
-          test -f "$SIM/app/Controllers/Ticketing.php" && echo "APP_OK"
+          test -f "$SIM/app/Controllers/Ticketing.php" && echo "APP_OK" || { echo "::error::kode tidak tersinkron"; exit 1; }
+          echo "== paket produksi ada =="
+          test -d "$SIM/vendor/mpdf/mpdf" && echo "VENDOR_PROD_OK" || { echo "::error::vendor produksi hilang"; exit 1; }
           echo "== ukuran akhir =="; du -sh "$SIM"
+
+      - name: Verifikasi metadata git produksi
+        run: |
+          echo "== HEAD produksi =="
+          git -C "$SIM" log --oneline -1
+          echo "== HEAD workspace =="
+          git -C "$GITHUB_WORKSPACE" log --oneline -1
+          echo "== git status produksi (harus bersih) =="
+          git -C "$SIM" status --porcelain
+          if [ -n "$(git -C "$SIM" status --porcelain)" ]; then
+            echo "::error::git status produksi TIDAK bersih"
+            exit 1
+          fi
+          echo "GIT_STATUS_BERSIH"
+          echo "== .env & writable tidak dianggap perubahan =="
+          git -C "$SIM" check-ignore -q .env && echo "ENV_IGNORED_OK" || echo "ENV_TIDAK_IGNORED"
+          git -C "$SIM" check-ignore -q writable/logs && echo "WRITABLE_IGNORED_OK" || echo "WRITABLE_TIDAK_IGNORED"
 
       - name: Uji jalur sukses penuh (health check nyata)
         run: |

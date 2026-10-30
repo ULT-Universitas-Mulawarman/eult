@@ -1,7 +1,8 @@
 name: Probe Uji Arsip
 
-# Probe sementara (READ-ONLY): uji perintah eult:arsip di produksi.
-# Hanya --dry-run dan --csv ke /tmp. Tidak menghapus apa pun.
+# Probe sementara (READ-ONLY): uji perintah eult:arsip memakai kode BRANCH
+# di workspace runner, dengan .env produksi (disalin sementara, lalu dihapus).
+# Hanya --dry-run dan --csv ke /tmp. Tidak menghapus data apa pun.
 on:
   push:
   workflow_dispatch:
@@ -11,27 +12,37 @@ jobs:
     name: Uji eult:arsip
     runs-on: [self-hosted, eult]
     steps:
-      - name: Perintah terpasang
+      - uses: actions/checkout@v4
+
+      - name: Siapkan .env sementara
         run: |
-          cd /home/eultunmul/apps/eult
-          php spark list 2>&1 | grep -E 'eult:' || echo "(belum ada)"
+          cp /home/eultunmul/apps/eult/.env "$GITHUB_WORKSPACE/.env"
+          chmod 600 "$GITHUB_WORKSPACE/.env"
+          echo "== .env disalin, kunci DB terdeteksi: =="
+          grep -cE '^EULT_DB_' "$GITHUB_WORKSPACE/.env"
+
+      - name: Perintah terdaftar
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          php spark list 2>&1 | grep -E 'eult:' || echo "(tidak ada)"
 
       - name: Dry-run ringkasan
         run: |
-          cd /home/eultunmul/apps/eult
-          php spark eult:arsip --dry-run 2>&1 | head -40
+          cd "$GITHUB_WORKSPACE"
+          php spark eult:arsip --dry-run 2>&1 | head -45
 
       - name: Ekspor CSV
         run: |
-          cd /home/eultunmul/apps/eult
-          php spark eult:arsip --csv=/tmp/kandidat-arsip.csv --semua 2>&1 | tail -5
-          echo "== ukuran & contoh =="
-          wc -l /tmp/kandidat-arsip.csv 2>/dev/null
-          head -4 /tmp/kandidat-arsip.csv 2>/dev/null
+          cd "$GITHUB_WORKSPACE"
+          php spark eult:arsip --csv=/tmp/kandidat-arsip.csv --semua 2>&1 | tail -6
+          echo "== jumlah baris CSV =="
+          wc -l /tmp/kandidat-arsip.csv 2>/dev/null || echo "(tidak ada CSV)"
+          echo "== 4 baris pertama =="
+          head -4 /tmp/kandidat-arsip.csv 2>/dev/null || true
 
-      - name: Pastikan tidak ada yang terhapus
+      - name: Pastikan data tidak berubah
         run: |
-          cd /home/eultunmul/apps/eult
+          cd "$GITHUB_WORKSPACE"
           get() {
             local v
             v=$(grep -E "^$1[[:space:]]*=" .env | head -1 | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]+$//')
@@ -45,4 +56,7 @@ jobs:
 
       - name: Bersihkan
         if: always()
-        run: rm -f /tmp/kandidat-arsip.csv
+        run: |
+          rm -f "$GITHUB_WORKSPACE/.env" /tmp/kandidat-arsip.csv
+          echo "== .env di workspace setelah dibersihkan =="
+          ls -la "$GITHUB_WORKSPACE/.env" 2>/dev/null || echo "(sudah tidak ada)"

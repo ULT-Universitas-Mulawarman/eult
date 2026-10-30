@@ -8,6 +8,70 @@
  * perilaku (tipe, ukuran, nama file) tetap sama.
  */
 
+if (! function_exists('eult_upload_max_kb')) {
+    /**
+     * Batas ukuran berkas unggahan dalam KB (satuan yang dipakai konfigurasi
+     * upload CI3). Satu sumber kebenaran: sebelumnya angka 15*1024 / 20*1024
+     * ditulis ulang di enam tempat dan tidak konsisten dengan sisi klien.
+     *
+     * Default 10 MB, dapat dioverride lewat .env tanpa mengubah kode:
+     *     EULT_UPLOAD_MAX_MB = 10
+     *
+     * PENTING: nilai ini hanya batas sisi aplikasi. Batas PHP
+     * (upload_max_filesize/post_max_size) dan nginx (client_max_body_size)
+     * harus >= nilai ini, kalau tidak berkas dipotong sebelum sampai ke
+     * kode. Lihat docs/deploy.md.
+     */
+    function eult_upload_max_kb(): int
+    {
+        $mb = (int) (function_exists('env') ? env('EULT_UPLOAD_MAX_MB') : 0);
+
+        if ($mb <= 0) {
+            $mb = 10;
+        }
+
+        // Batasi agar tidak melampaui batas PHP yang wajar (512 MB).
+        $mb = min($mb, 512);
+
+        return $mb * 1024;
+    }
+}
+
+if (! function_exists('eult_upload_max_mb')) {
+    /**
+     * Batas ukuran berkas unggahan dalam MB (untuk pesan ke pengguna).
+     */
+    function eult_upload_max_mb(): int
+    {
+        return (int) (eult_upload_max_kb() / 1024);
+    }
+}
+
+if (! function_exists('eult_upload_pesan_galat')) {
+    /**
+     * Pesan galat unggahan dalam bahasa Indonesia.
+     *
+     * Pesan bawaan CI4/PHP berbahasa Inggris dan tidak menyebut angka batas,
+     * sehingga pengguna tidak tahu harus berbuat apa. Kasus paling sering:
+     * berkas melebihi upload_max_filesize PHP (bukan batas aplikasi) — pesan
+     * ini menjelaskannya agar tidak dilaporkan sebagai "aplikasi error".
+     */
+    function eult_upload_pesan_galat(int $kode): string
+    {
+        $batasMb = eult_upload_max_mb();
+
+        return match ($kode) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Ukuran berkas melebihi batas server. Maksimal ' . $batasMb . ' MB.',
+            UPLOAD_ERR_PARTIAL    => 'Berkas hanya terunggah sebagian. Periksa koneksi lalu coba lagi.',
+            UPLOAD_ERR_NO_FILE    => 'Tidak ada berkas yang dipilih.',
+            UPLOAD_ERR_NO_TMP_DIR => 'Folder sementara server tidak tersedia. Hubungi administrator.',
+            UPLOAD_ERR_CANT_WRITE => 'Server gagal menyimpan berkas. Hubungi administrator.',
+            UPLOAD_ERR_EXTENSION  => 'Unggahan dihentikan oleh ekstensi PHP. Hubungi administrator.',
+            default               => 'Berkas gagal diunggah (kode ' . $kode . ').',
+        };
+    }
+}
+
 if (! function_exists('eult_upload_ticket')) {
     /**
      * Mengunggah lampiran tiket (field 'ticketArchiveId') lalu
@@ -25,7 +89,7 @@ if (! function_exists('eult_upload_ticket')) {
         }
 
         if (! $berkas->isValid()) {
-            eult_message_kirim(strip_tags($berkas->getErrorString()), 'error');
+            eult_message_kirim(eult_upload_pesan_galat($berkas->getError()), 'error');
         }
 
         $tujuan = rtrim($konfig['url'], '/') . '/';
@@ -48,7 +112,7 @@ if (! function_exists('eult_upload_ticket')) {
 
         // Validasi ukuran (CI3 max_size dalam KB)
         if ($berkas->getSizeByUnit('kb') > $konfig['size']) {
-            eult_message_kirim('Ukuran file melebihi batas ' . round($konfig['size'] / 1024) . ' MB.', 'error');
+            eult_message_kirim('Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.', 'error');
         }
 
         $namaBaru                    = $konfig['namafile'] . '.' . $ekstensi;
@@ -106,7 +170,7 @@ if (! function_exists('eult_upload_custom')) {
 
         if ($berkas === null || ! $berkas->isValid()) {
             $pesan = $berkas instanceof \CodeIgniter\HTTP\Files\UploadedFile
-                ? $berkas->getErrorString()
+                ? eult_upload_pesan_galat($berkas->getError())
                 : 'File tidak ditemukan.';
             eult_message_kirim(strip_tags($pesan), 'error');
         }
@@ -129,7 +193,7 @@ if (! function_exists('eult_upload_custom')) {
         }
 
         if ($berkas->getSizeByUnit('kb') > $konfig['size']) {
-            eult_message_kirim('Ukuran file melebihi batas ' . round($konfig['size'] / 1024) . ' MB.', 'error');
+            eult_message_kirim('Ukuran file melebihi batas ' . eult_upload_max_mb() . ' MB.', 'error');
         }
 
         $namaBaru = $konfig['namafile'] . '.' . $ekstensi;

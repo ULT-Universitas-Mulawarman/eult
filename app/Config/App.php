@@ -131,10 +131,21 @@ class App extends BaseConfig
      * The default timezone that will be used in your application to display
      * dates with the date helper, and can be retrieved through app_timezone()
      *
+     * E-ULT melayani kampus di Kalimantan Timur, jadi seluruh waktu yang
+     * disimpan dan ditampilkan memakai WITA (UTC+8). Sebelumnya 'UTC',
+     * sehingga jam tiket tampil mundur 8 jam.
+     *
+     * Dapat dioverride lewat .env tanpa mengubah kode:
+     *     app.appTimezone = Asia/Makassar
+     *
+     * CATATAN: mengubah nilai ini TIDAK mengoreksi baris lama yang sudah
+     * terlanjur tersimpan dalam UTC. Jalankan `php spark eult:waktu --dry-run`
+     * lalu `php spark eult:waktu` untuk mengoreksinya.
+     *
      * @see https://www.php.net/manual/en/timezones.php for list of timezones
      *      supported by PHP.
      */
-    public string $appTimezone = 'UTC';
+    public string $appTimezone = 'Asia/Makassar';
 
     /**
      * --------------------------------------------------------------------------

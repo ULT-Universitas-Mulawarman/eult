@@ -26,6 +26,29 @@
 # app.forceGlobalSecureRequests = false
 # app.CSPEnabled = false
 
+# Zona waktu aplikasi. Default di kode: Asia/Makassar (WITA, UTC+8).
+# Nilai ini dipakai date()/Time CI4 untuk MENULIS ke database, jadi jangan
+# diubah ke UTC — data akan mundur 8 jam. Bila pernah berjalan dengan UTC,
+# jalankan `php spark eult:waktu --dry-run` lalu `php spark eult:waktu`.
+# app.appTimezone = Asia/Makassar
+
+#--------------------------------------------------------------------
+# UPLOAD
+#--------------------------------------------------------------------
+
+# Batas ukuran berkas unggahan dalam MB (default 10).
+# HANYA batas sisi aplikasi. Batas PHP (upload_max_filesize, post_max_size)
+# dan nginx (client_max_body_size) harus >= nilai ini, kalau tidak berkas
+# dipotong sebelum sampai ke kode. Lihat docs/deploy.md.
+# EULT_UPLOAD_MAX_MB = 10
+
+#--------------------------------------------------------------------
+# SESSION
+#--------------------------------------------------------------------
+
+# Masa berlaku sesi dalam detik (default 28800 = 8 jam).
+# session.expiration = 28800
+
 #--------------------------------------------------------------------
 # DATABASE
 #--------------------------------------------------------------------
@@ -69,6 +92,8 @@
 
 # session.driver = 'CodeIgniter\Session\Handlers\FileHandler'
 # session.savePath = null
+# Masa berlaku sesi (detik). Default kode 28800 = 8 jam.
+# session.expiration = 28800
 
 #--------------------------------------------------------------------
 # LOGGER
@@ -144,6 +169,9 @@
 # CHECKLIST PRODUCTION — pastikan seluruh blok WAJIB di atas terisi
 # di file .env server (file ini hanya template, tidak dibaca aplikasi):
 #  [ ] CI_ENVIRONMENT = production, app.baseURL = URL publik
+#  [ ] app.appTimezone = Asia/Makassar (WITA) — jangan UTC
+#  [ ] upload_max_filesize & post_max_size PHP >= EULT_UPLOAD_MAX_MB
+#  [ ] session.expiration sesuai kebutuhan (default 8 jam)
 #  [ ] encryption.key (unik, via `php spark key:generate`)
 #  [ ] EULT_ENCRYPTION_LEGACY_KEY (opsional bila encryption.key sudah ada;
 #      isi bila ingin kunci tautan tiket terpisah dari kunci framework)

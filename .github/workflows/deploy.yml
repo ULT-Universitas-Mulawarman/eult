@@ -1,0 +1,104 @@
+name: Deploy
+
+# CI/CD di self-hosted runner (label: self-hosted, eult).
+# Alur: verifikasi -> deploy ke /home/eultunmul/apps/eult -> health check.
+# Bila deploy gagal, .github/scripts/deploy.sh otomatis rollback dari backup.
+#
+# Konfigurasi opsional (Settings > Secrets and variables > Actions > Variables):
+#   DEPLOY_PATH             default /home/eultunmul/apps/eult
+#   DEPLOY_HEALTHCHECK_URL  URL publik untuk dicek setelah deploy
+#   DEPLOY_KEEP_BACKUPS     jumlah backup yang disimpan (default 5)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Verifikasi saja, jangan sentuh produksi'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/home/eultunmul/apps/eult' }}
+  DEPLOY_HEALTHCHECK_URL: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+  DEPLOY_KEEP_BACKUPS: ${{ vars.DEPLOY_KEEP_BACKUPS || '5' }}
+
+jobs:
+  verify:
+    name: Verifikasi
+    runs-on: [self-hosted, eult]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Info lingkungan
+        run: |
+          php -v | head -1
+          composer --version | head -1
+
+      - name: Cek ekstensi PHP wajib
+        run: |
+          missing=""
+          for ext in intl mbstring gd mysqli curl zip json openssl; do
+            php -m | grep -qix "$ext" || missing="$missing $ext"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Ekstensi PHP belum terpasang:$missing"
+            echo "Pasang dengan: sudo apt install php-{intl,mbstring,gd,mysql,curl,zip,xml}"
+            exit 1
+          fi
+          echo "Semua ekstensi wajib tersedia."
+
+      - name: Validasi composer
+        run: composer validate --strict --no-check-publish
+
+      - name: Install dependensi
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Audit CVE dependensi produksi
+        run: composer audit --no-dev --no-interaction
+
+      - name: Lint PHP
+        run: find app tests -name '*.php' -print0 | xargs -0 -n1 -P4 php -l > /dev/null
+
+      - name: Unit test
+        run: vendor/bin/phpunit --no-coverage --testsuite Unit
+
+  deploy:
+    name: Deploy produksi
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, eult]
+    environment:
+      name: production
+      url: ${{ vars.DEPLOY_HEALTHCHECK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build dependensi produksi
+        run: composer install --no-dev --no-interaction --prefer-dist --no-progress --optimize-autoloader
+
+      - name: Deploy
+        env:
+          DEPLOY_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+        run: bash .github/scripts/deploy.sh
+
+      - name: Ringkasan
+        if: always()
+        run: |
+          {
+            echo "### Deploy E-ULT"
+            echo ""
+            echo "| Item | Nilai |"
+            echo "|---|---|"
+            echo "| Commit | \`${GITHUB_SHA:0:7}\` |"
+            echo "| Tujuan | \`${DEPLOY_PATH}\` |"
+            echo "| Status | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

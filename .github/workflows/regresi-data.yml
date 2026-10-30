@@ -28,16 +28,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Hitung tiket tanpa arsip
+      - name: Hitung tiket tanpa arsip (hanya sejak perbaikan)
         run: |
           cd /home/eultunmul/apps/eult
-          php spark eult:arsip --dry-run 2>&1 | tee /tmp/eult-arsip.txt
+          # --sejak membatasi hitungan ke tiket yang dibuat SETELAH perbaikan
+          # atomik (2026-10-30). Tanpa ini, tumpukan 4.156 tiket lama membuat
+          # job merah setiap hari — alert fatigue, bukan deteksi regresi.
+          php spark eult:arsip --dry-run --sejak="$SEJAK" 2>&1 | tee /tmp/eult-arsip.txt
+        env:
+          SEJAK: '2026-10-31'
 
       - name: Nilai ambang
         run: |
           # Ambang: kandidat hapus (tiket tanpa arsip DAN tanpa jejak
-          # penanganan) harus 0. Tiket tanpa arsip yang SUDAH ditangani
-          # petugas tidak dihitung — arsipnya mungkin hilang karena sebab lain.
+          # penanganan) harus 0 sejak perbaikan. Tiket tanpa arsip yang
+          # SUDAH ditangani petugas tidak dihitung.
           baris=$(grep -oP 'Kandidat hapus.*: \K[0-9]+' /tmp/eult-arsip.txt | tail -1)
 
           if [ -z "$baris" ]; then
@@ -53,22 +58,22 @@ jobs:
             echo ""
             echo "| Item | Nilai |"
             echo "|---|---|"
-            echo "| Kandidat tiket tanpa arsip | **$baris** |"
+            echo "| Kandidat tiket tanpa arsip (sejak 2026-10-31) | **$baris** |"
             echo "| Ambang | 0 |"
             echo "| Waktu | $(date '+%Y-%m-%d %H:%M:%S %Z') |"
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$baris" -ne 0 ]; then
-            echo "::error::$baris tiket tanpa arsip terdeteksi — kemungkinan regresi bug unggahan."
+            echo "::error::$baris tiket tanpa arsip terdeteksi sejak perbaikan — kemungkinan regresi."
             echo ""
             echo "Tindakan:"
             echo "  1. Periksa log: writable/logs/log-<tanggal>.log"
-            echo "  2. Tinjau kandidat: php spark eult:arsip --semua"
-            echo "  3. Ekspor untuk petugas: php spark eult:arsip --csv=/tmp/kandidat.csv --semua"
+            echo "  2. Tinjau kandidat: php spark eult:arsip --semua --sejak=2026-10-31"
+            echo "  3. Ekspor untuk petugas: php spark eult:arsip --csv=/tmp/kandidat.csv --sejak=2026-10-31"
             exit 1
           fi
 
-          echo "Tidak ada tiket tanpa arsip. Sehat."
+          echo "Tidak ada tiket tanpa arsip sejak perbaikan. Sehat."
 
       - name: Bersihkan
         if: always()

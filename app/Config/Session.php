@@ -40,8 +40,13 @@ class Session extends BaseConfig
      *
      * The number of SECONDS you want the session to last.
      * Setting to 0 (zero) means expire when the browser is closed.
+     *
+     * 8 jam (28800) dipilih karena petugas operator sering membuka tiket
+     * panjang; nilai lama 7200 (2 jam) memaksa login ulang di tengah
+     * pekerjaan. Dapat dioverride lewat .env:
+     *     session.expiration = 28800
      */
-    public int $expiration = 7200;
+    public int $expiration = 28800;
 
     /**
      * --------------------------------------------------------------------------

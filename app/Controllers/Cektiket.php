@@ -105,7 +105,7 @@ class Cektiket extends BaseController
         $konfig = [
             'url'      => WRITEPATH . 'uploads/chat/',
             'type'     => 'pdf',
-            'size'     => 15 * 1024,
+            'size'     => eult_upload_max_kb(),
             'namafile' => 'CHAT_' . $idTiket . '_' . date('YmdHis'),
         ];
 

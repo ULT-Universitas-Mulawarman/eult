@@ -236,9 +236,13 @@ class Ticketing extends BaseController
             ]);
         }
 
-        // Pemohon umum (NIK tanpa NIM/NIP): kategori layanan publik dibuka,
-        // nama diisi manual oleh petugas.
-        if (strlen($id) === 16 && ctype_digit($id)) {
+        // Pemohon umum: nomor identitas yang bukan NIM/NIP kampus tetap
+        // dibuka kategorinya, nama diisi manual oleh petugas.
+        //
+        // Panjang yang diterima (samakan dengan Login::getIdentitas):
+        //   10 digit -> NIM lama (juga NIK sebagian daerah)
+        //   16 digit -> NIK KTP
+        if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
             return $this->response->setJSON([
                 'status' => true,
                 'umum'   => true,
@@ -574,7 +578,7 @@ class Ticketing extends BaseController
             eult_upload_ticket([
                 'url'      => WRITEPATH . 'uploads/ticketing/',
                 'type'     => 'pdf',
-                'size'     => 15 * 1024,
+                'size'     => eult_upload_max_kb(),
                 'namafile' => 'ASSIGN_' . str_replace('-', '', $idLama) . '_' . date('YmdHis'),
             ], $paramFile);
             $paramDisposisi['disposisiArchiveId'] = $arsipId;
@@ -678,7 +682,7 @@ class Ticketing extends BaseController
             eult_upload_ticket([
                 'url'      => WRITEPATH . 'uploads/ticketing/',
                 'type'     => 'pdf',
-                'size'     => 15 * 1024,
+                'size'     => eult_upload_max_kb(),
                 'namafile' => 'ACCEPT_' . str_replace('-', '', $idLama) . '_' . date('YmdHis'),
             ], $paramFile);
             $paramDisposisi['disposisiArchiveId'] = $arsipId;
@@ -950,7 +954,7 @@ class Ticketing extends BaseController
                 eult_upload_ticket([
                     'url'      => WRITEPATH . 'uploads/ticketing/',
                     'type'     => 'pdf',
-                    'size'     => 15 * 1024,
+                    'size'     => eult_upload_max_kb(),
                     'namafile' => 'OUTPUT_' . str_replace('-', '', (string) $terbuka) . '_' . date('YmdHis'),
                 ], $paramFile);
             }
@@ -1168,7 +1172,7 @@ class Ticketing extends BaseController
             $pindah = eult_upload_custom([
                 'url'      => WRITEPATH . 'uploads/chat/',
                 'type'     => 'pdf|jpg|png',
-                'size'     => 15 * 1024,
+                'size'     => eult_upload_max_kb(),
                 'namafile' => 'CHAT_' . $idTiket . '_' . date('YmdHis'),
             ], 'chatFile');
             $namaFile = $pindah->getFilename();
@@ -1279,7 +1283,7 @@ class Ticketing extends BaseController
             eult_upload_ticket([
                 'url'      => WRITEPATH . 'uploads/ticketing/',
                 'type'     => 'pdf',
-                'size'     => 20 * 1024,
+                'size'     => eult_upload_max_kb(),
                 'namafile' => 'TIKET_' . str_replace('-', '', $idTiket) . '_' . date('YmdHis'),
             ], $paramFile);
         }

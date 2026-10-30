@@ -207,7 +207,7 @@ class Login extends BaseController
             $konfig = [
                 'url'      => WRITEPATH . 'uploads/ticketing/',
                 'type'     => 'pdf',
-                'size'     => 20 * 1024,
+                'size'     => eult_upload_max_kb(),
                 'namafile' => 'TIKET_' . $arsipId . '_' . date('YmdHis'),
             ];
 
@@ -296,9 +296,15 @@ class Login extends BaseController
             ]);
         }
 
-        // Pemohon umum (NIK tanpa NIM/NIP): kategori layanan publik dibuka,
-        // nama diisi manual oleh pemohon karena tidak ada data OSM.
-        if (strlen($id) === 10 && ctype_digit($id)) {
+        // Pemohon umum: nomor identitas yang bukan NIM/NIP kampus tetap
+        // dibuka kategorinya, nama diisi manual oleh pemohon.
+        //
+        // Panjang yang diterima:
+        //   10 digit -> NIM lama (juga NIK sebagian daerah)
+        //   16 digit -> NIK KTP
+        // NIM/NIP yang ditemukan di OSM sudah ditangani di atas; blok ini
+        // hanya berlaku bila OSM tidak mengembalikan data.
+        if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
             return $this->response->setJSON([
                 'status' => true,
                 'umum'   => true,

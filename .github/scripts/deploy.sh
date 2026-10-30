@@ -108,6 +108,7 @@ rsync -a --delete --delay-updates --itemize-changes \
     --exclude='/.vscode/' \
     --exclude='/phpunit.xml' \
     --exclude='/.phpunit.cache/' \
+    --exclude='/vendor/mpdf/mpdf/tmp/' \
     "$SOURCE"/ "$TARGET"/ > /tmp/eult-rsync.log 2>&1 || true
 
 # Tampilkan ringkasan, bukan ribuan baris perubahan vendor.

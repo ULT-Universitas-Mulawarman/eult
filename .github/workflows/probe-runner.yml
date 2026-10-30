@@ -3,6 +3,7 @@ name: Probe Runner
 # Workflow sementara untuk mengintrospeksi lingkungan self-hosted runner.
 # Dihapus setelah data cukup untuk menyusun ci.yml/deploy.yml.
 on:
+  push:
   workflow_dispatch:
 
 jobs:

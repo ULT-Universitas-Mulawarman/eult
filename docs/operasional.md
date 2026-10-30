@@ -97,7 +97,7 @@ Berkas harus melewati tiga lapis; yang paling kecil menentukan:
 | Lapis | Lokasi | Nilai sebelum | Target |
 |---|---|---|---|
 | nginx | `/etc/nginx/sites-enabled/eult.unmul.ac.id.conf` | `client_max_body_size 20M` | ✅ cukup |
-| PHP | `php.ini` FPM 8.5 / pool | `upload_max_filesize 2M`, `post_max_size 8M` | ❗ **harus dinaikkan** |
+| PHP | `/etc/php/8.5/fpm/php.ini` (bukan CLI/CGI) | `upload_max_filesize 2M`, `post_max_size 8M` | ❗ **harus dinaikkan** |
 | Aplikasi | `eult_upload_max_kb()` | 15–20 MB tidak konsisten | ✅ 10 MB |
 
 ### Perbaikan aplikasi (sudah)
@@ -114,32 +114,77 @@ Berkas harus melewati tiga lapis; yang paling kecil menentukan:
 `upload_max_filesize = 2M` membuat berkas > 2 MB **ditolak PHP sebelum
 sampai ke kode aplikasi**, jadi pesan dari aplikasi tidak akan muncul.
 
-Pilih salah satu:
+#### File mana yang benar?
 
-**A. Virtualmin (disarankan, tanpa edit file)**
+Situs `eult.unmul.ac.id` dilayani **php8.5-fpm**, bukan CLI dan bukan CGI:
+
+```
+nginx fastcgi_pass unix:/run/php/1792665430372593.sock
+  -> /etc/php/8.5/fpm/pool.d/1792665430372593.conf  (user = eultunmul)
+  -> /etc/php/8.5/fpm/php.ini                        <- INI yang dibaca
+```
+
+| File | Dipakai oleh | Perlu diubah? |
+|---|---|---|
+| `/etc/php/8.5/fpm/php.ini` | **php8.5-fpm** (web) | ✅ **ya, ini yang benar** |
+| `/etc/php/8.5/cli/php.ini` | `php spark`, composer, cron | ❌ tidak |
+| `/etc/php/8.5/cgi/php.ini` | CGI (tidak dipakai situs ini) | ❌ tidak |
+| `/etc/php/8.4/*` | pool `antrianult` (situs antrian) | ❌ tidak |
+
+> **Jebakan:** halaman *PHP Configuration Files* di Virtualmin hanya
+> menampilkan varian **CLI** dan **CGI**. File **FPM** tidak muncul di sana,
+> padahal itulah yang melayani situs. Mengedit CLI hanya berpengaruh pada
+> `php spark migrate` dan sejenisnya — tidak pada unggahan lewat browser.
+>
+> Juga: `php -i` dari terminal menampilkan php.ini **CLI**, bukan FPM.
+> Untuk memeriksa nilai FPM, baca filenya langsung atau pakai `phpinfo()`
+> lewat web.
+
+#### Pilih salah satu
+
+**A. Virtualmin PHP Options (disarankan — per domain, tanpa edit file)**
 
 > Virtualmin → domain `eult.unmul.ac.id` → **Server Configuration →
 > PHP Options** → ubah:
-> - `Maximum allowed file size for uploads` → `10M` (atau lebih)
+> - `Maximum allowed file size for uploads` → `10M`
 > - `Maximum HTTP POST size` → `12M` (harus ≥ upload, beri ruang header)
 >
-> Simpan, lalu `systemctl reload php8.5-fpm`.
+> Simpan. Virtualmin menulisnya ke pool sebagai `php_admin_value` dan
+> me-reload FPM sendiri.
 
-**B. Edit pool FPM**
+**B. Edit pool FPM (per domain, tanpa menyentuh situs lain)**
 
 ```bash
 sudo tee -a /etc/php/8.5/fpm/pool.d/1792665430372593.conf >/dev/null <<'EOF'
-php_value[upload_max_filesize] = 10M
-php_value[post_max_size] = 12M
+php_admin_value[upload_max_filesize] = 10M
+php_admin_value[post_max_size] = 12M
 EOF
 sudo systemctl reload php8.5-fpm
 ```
 
-**Verifikasi:**
+**C. Edit `/etc/php/8.5/fpm/php.ini` (GLOBAL — hati-hati)**
 
 ```bash
-php -i | grep -E 'upload_max_filesize|post_max_size'
-# harus: upload_max_filesize => 10M, post_max_size => 12M
+sudo sed -i 's/^upload_max_filesize = 2M/upload_max_filesize = 10M/' /etc/php/8.5/fpm/php.ini
+sudo sed -i 's/^post_max_size = 8M/post_max_size = 12M/'       /etc/php/8.5/fpm/php.ini
+sudo systemctl reload php8.5-fpm
+```
+
+> Perubahan ini berlaku untuk **semua** situs di php8.5-fpm: `eult`,
+> `ppid-ult`, dan `ult`. Bila hanya E-ULT yang butuh 10 MB, pakai opsi A
+> atau B.
+
+#### Verifikasi
+
+Jangan pakai `php -i` (itu CLI). Buat file cek sementara di docroot:
+
+```bash
+cat > /home/eultunmul/public_html/_cek.php <<'EOF'
+<?php echo ini_get('upload_max_filesize'), ' / ', ini_get('post_max_size');
+EOF
+curl -s -H 'Host: eult.unmul.ac.id' http://192.168.55.105/_cek.php; echo
+rm -f /home/eultunmul/public_html/_cek.php
+# harus: 10M / 12M
 ```
 
 > `post_max_size` sengaja lebih besar dari `upload_max_filesize` karena

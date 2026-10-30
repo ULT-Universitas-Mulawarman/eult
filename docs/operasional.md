@@ -51,8 +51,31 @@ Opsi:
 | Opsi | Arti |
 |---|---|
 | `--dry-run` | Hanya menampilkan jumlah baris per kolom |
-| `--since=YYYY-MM-DD` | Batas awal (default `2026-10-26`) |
+| `--since 2026-10-25` | Batas awal (default `2026-10-26`) |
 | `--batalkan` | Kurangi 8 jam (membatalkan koreksi) |
+
+> **Sintaks opsi:** CI4 hanya memisah opsi pada spasi. `--since 2026-10-25`
+> adalah bentuk yang dijamin; perintah ini juga menerima `--since=2026-10-25`
+> karena `parseCommandLine()` CI4 menyimpan `--since=...` sebagai satu key
+> utuh (bukan `since`). Bila ragu, pakai bentuk spasi.
+
+**Hasil dry-run di produksi (2026-10-30 14:58 WITA):**
+
+```
+d_ticketing.ticketCreated           131 baris
+d_ticketing.ticketAssigned           16 baris
+d_ticketing.ticketValidated           9 baris
+d_ticketing.ticketSuratCreated       10 baris
+d_ticketing.ticketVerified           51 baris
+d_ticketing.ticketRejected            6 baris
+d_disposisi.disposisiTanggal         37 baris
+d_disposisi.disposisiTanggalAkhir    38 baris
+d_replies.repliesDate                27 baris
+d_history.tglHistory                297 baris
+s_user.susrLastLogin                 15 baris
+
+Total baris terdampak: 637
+```
 
 Perintah ini **idempoten**: kolom yang sudah dikoreksi dicatat di tabel
 `eult_waktu_koreksi`, jadi dijalankan dua kali tidak menambah 8 jam lagi.

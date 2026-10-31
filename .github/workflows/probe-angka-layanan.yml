@@ -1,0 +1,56 @@
+name: Probe Angka Layanan
+
+# Probe sementara (READ-ONLY): memastikan jumlah layanan yang terlihat
+# pemohon umum vs internal dengan DATA PRODUKSI (bukan dump lokal).
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  hitung:
+    name: Hitung layanan per role
+    runs-on: [self-hosted, eult]
+    steps:
+      - name: Hitung dari DB referensi produksi
+        run: |
+          cd /home/eultunmul/apps/eult
+          get() {
+            local v
+            v=$(grep -E "^$1[[:space:]]*=" .env | head -1 | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]+$//')
+            v=${v%\"}; v=${v#\"}; v=${v%\'}; v=${v#\'}
+            printf '%s' "$v"
+          }
+          H=$(get EULT_DBULT_HOST); U=$(get EULT_DBULT_USER)
+          P=$(get EULT_DBULT_PASS); D=$(get EULT_DBULT_NAME)
+          q() { mysql -h "$H" -u "$U" -p"$P" -D "$D" -N -e "$1" 2>&1; }
+
+          echo "db=$D"
+
+          echo "== SEMUA layanan tampil (internal) =="
+          q "SELECT COUNT(*) FROM ref_layanan WHERE layananisdisplay = 1;"
+
+          echo "== layanan untuk UMUM (jenis=3 OR id di daftar) =="
+          q "SELECT COUNT(*) FROM ref_layanan
+              WHERE layananisdisplay = 1
+                AND (layananjenisId = 3
+                     OR layananId IN (9,12,32,45,78,88,110,27,28,29,146,150,168));"
+
+          echo "== rincian per jenis untuk UMUM =="
+          q "SELECT layananjenisId, COUNT(*) FROM ref_layanan
+              WHERE layananisdisplay = 1
+                AND (layananjenisId = 3
+                     OR layananId IN (9,12,32,45,78,88,110,27,28,29,146,150,168))
+              GROUP BY layananjenisId ORDER BY layananjenisId;"
+
+          echo "== rincian per jenis untuk INTERNAL =="
+          q "SELECT layananjenisId, COUNT(*) FROM ref_layanan
+              WHERE layananisdisplay = 1
+              GROUP BY layananjenisId ORDER BY layananjenisId;"
+
+          echo "== apakah ada id di daftar yang tidak ada/tidak tampil =="
+          q "SELECT layananId, layananisdisplay FROM ref_layanan
+              WHERE layananId IN (9,12,32,45,78,88,110,27,28,29,146,150,168)
+                AND layananisdisplay <> 1;"
+
+          echo "== EULT_LAYANAN_UMUM di .env produksi =="
+          grep -E '^EULT_LAYANAN_(UMUM|KHUSUS)' .env || echo "(tidak diset — memakai default kode)"

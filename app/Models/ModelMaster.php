@@ -406,10 +406,40 @@ class ModelMaster extends \CodeIgniter\Model
     }
 
     /**
+     * Daftar layananId yang boleh diajukan PEMOHON UMUM (bukan mahasiswa/
+     * pegawai terverifikasi OSM).
+     *
+     * Daftar ini berasal dari aplikasi CI3 sebelumnya dan dapat dioverride
+     * lewat .env tanpa mengubah kode:
+     *
+     *     EULT_LAYANAN_UMUM = '9,12,32,45,...'
+     *
+     * Nama lama `EULT_LAYANAN_KHUSUS` tetap dibaca sebagai fallback agar
+     * .env yang sudah terpasang tidak perlu diubah.
+     *
+     * @return list<int>
+     */
+    public function layananUmumIds(): array
+    {
+        $mentah = (string) (env('EULT_LAYANAN_UMUM') ?: env('EULT_LAYANAN_KHUSUS') ?: '9,12,32,45,78,88,110,27,28,29,146,150,168');
+
+        $daftar = array_map(
+            static fn (string $v): int => (int) trim($v),
+            explode(',', $mentah),
+        );
+
+        return array_values(array_filter($daftar, static fn (int $v): bool => $v > 0));
+    }
+
+    /**
      * Daftar layanan aktif dari database referensi (join ref_layanan/jenis/unit).
      * Koneksi dbult menunjuk ke `db_ultunmul` (lihat .env EULT_DBULT_NAME).
+     *
+     * @param bool $hanyaUmum true = batasi ke layanan yang boleh diajukan
+     *                        pemohon umum (jenis INFORMASI + daftar di
+     *                        layananUmumIds()). false = semua layanan tampil.
      */
-    public function getLayanan(string $khusus = ''): array|false
+    public function getLayanan(bool $hanyaUmum = false): array|false
     {
         $db = $this->dbUlt();
 
@@ -422,16 +452,47 @@ class ModelMaster extends \CodeIgniter\Model
             ->orderBy('unitUrut')
             ->orderBy('layananId');
 
-        if (! empty($khusus)) {
-            // Daftar layanan khusus dapat dioverride via .env
-            // (EULT_LAYANAN_KHUSUS, dipisah koma) tanpa mengubah kode.
-            $daftar = array_filter(array_map('trim', explode(',', (string) (env('EULT_LAYANAN_KHUSUS') ?: '9,12,32,45,78,88,110,27,28,29,146,150,168'))));
-            $builder->groupStart()->where('jenislayananId', 3)->orWhereIn('layananId', $daftar)->groupEnd();
+        if ($hanyaUmum) {
+            // Pemohon umum hanya boleh memilih LAYANAN INFORMASI (jenis 3)
+            // atau layanan yang secara eksplisit diizinkan di .env.
+            $builder->groupStart()
+                ->where('jenislayananId', 3)
+                ->orWhereIn('layananId', $this->layananUmumIds())
+                ->groupEnd();
         }
 
         $hasil = $builder->get()->getResultArray();
 
         return $hasil === [] ? false : $hasil;
+    }
+
+    /**
+     * Apakah satu layanan boleh diajukan pemohon umum.
+     *
+     * Dipakai sebagai penegakan di server (savetiket/save), karena menyaring
+     * dropdown saja tidak mencegah permintaan yang dibuat langsung.
+     */
+    public function layananBolehUntukUmum(int|string $layananId): bool
+    {
+        if ((string) $layananId === '' || ! ctype_digit((string) $layananId)) {
+            return false;
+        }
+
+        $baris = $this->dbUlt()->table('ref_layanan')
+            ->select('layananId,layananjenisId')
+            ->where('layananId', (int) $layananId)
+            ->limit(1)
+            ->get()->getRowArray();
+
+        if ($baris === null || $baris === false) {
+            return false;
+        }
+
+        if ((int) ($baris['layananjenisId'] ?? 0) === 3) {
+            return true;
+        }
+
+        return in_array((int) $baris['layananId'], $this->layananUmumIds(), true);
     }
 
     /**

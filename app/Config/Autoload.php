@@ -93,6 +93,7 @@ class Autoload extends AutoloadConfig
         'cookie',
         'eult_captcha',
         'eult_kode',
+        'eult_pemohon',
         'eult_upload',
         'eult_history',
         'eult_message',

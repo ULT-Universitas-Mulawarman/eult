@@ -161,9 +161,14 @@
 # EULT_EKTMI_PEJABAT_NIP = '19...'
 # EULT_EKTMI_PEJABAT_JABATAN = 'Koordinator Unit Layanan Terpadu'
 
-# Daftar ID layanan khusus untuk pemohon internal (ModelMaster::getLayanan),
-# dipisah koma.
-# EULT_LAYANAN_KHUSUS = '9,12,32,45,78,88,110,27,28,29,146,150,168'
+# Daftar ID layanan yang BOLEH diajukan PEMOHON UMUM (nomor identitas tidak
+# ditemukan di OSM), dipisah koma. Mahasiswa/pegawai terverifikasi OSM tetap
+# melihat SEMUA layanan. Layanan berjenis "LAYANAN INFORMASI" (jenis 3) selalu
+# ikut terbuka untuk umum tanpa perlu didaftarkan di sini.
+#
+# Daftar ini disaring di dropdown DAN ditegakkan di server saat simpan.
+# EULT_LAYANAN_KHUSUS (nama lama) masih dibaca sebagai fallback.
+# EULT_LAYANAN_UMUM = '9,12,32,45,78,88,110,27,28,29,146,150,168'
 
 #--------------------------------------------------------------------
 # CHECKLIST PRODUCTION — pastikan seluruh blok WAJIB di atas terisi

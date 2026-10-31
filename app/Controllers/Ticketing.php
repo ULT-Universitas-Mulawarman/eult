@@ -185,7 +185,12 @@ class Ticketing extends BaseController
     {
         $id = (string) $this->request->getPost('id');
 
-        $datas = $id === 'true' ? $this->tiket->getLayanan() : $this->tiket->getLayanan($id);
+        // Pemohon umum (NIK) hanya melihat layanan publik; mahasiswa/pegawai
+        // terverifikasi melihat semua. Role dibaca dari session yang diisi
+        // getIdentitas(), bukan dari parameter klien.
+        $hanyaUmum = $id !== 'true' || eult_pemohon_umum();
+
+        $datas = $this->tiket->getLayanan($hanyaUmum);
 
         if ($datas !== false) {
             $kepala = null;
@@ -216,6 +221,8 @@ class Ticketing extends BaseController
         $mhs = $this->osm->mhsId2($id);
 
         if (is_object($mhs) && ! empty($mhs->nim)) {
+            eult_pemohon_role_simpan($id, 'internal');
+
             return $this->response->setJSON([
                 'status'  => true,
                 'ismhs'   => true,
@@ -227,6 +234,8 @@ class Ticketing extends BaseController
         $pegawai = $this->osm->pegawaiId($id);
         if ($pegawai == true) {
             $nama = is_object($pegawai) ? ($pegawai->nama ?? '') : '';
+
+            eult_pemohon_role_simpan($id, 'internal');
 
             return $this->response->setJSON([
                 'status'      => true,
@@ -243,6 +252,8 @@ class Ticketing extends BaseController
         //   10 digit -> NIM lama (juga NIK sebagian daerah)
         //   16 digit -> NIK KTP
         if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
+            eult_pemohon_role_simpan($id, 'umum');
+
             return $this->response->setJSON([
                 'status' => true,
                 'umum'   => true,
@@ -1213,6 +1224,20 @@ class Ticketing extends BaseController
         if (! $this->tiket->layananValid($kategoriDipilih)) {
             log_message('error', 'EULT Ticketing::save ditolak: ticketCategories tidak valid ({kategori})', ['kategori' => $kategoriDipilih]);
             eult_message_kirim($this->judul . ' Gagal Disimpan, kategori layanan tidak valid atau sudah tidak tersedia. Silakan pilih ulang kategori layanan.', 'error');
+        }
+
+        // Penegakan batas layanan pemohon umum DI SERVER (sama dengan
+        // Login::savetiket). Petugas juga tidak boleh mendaftarkan layanan
+        // internal untuk pemohon ber-NIK.
+        $identitasPemohon = (string) $this->request->getPost('ticketIdentitas');
+        $rolePemohon      = eult_pemohon_role($identitasPemohon);
+
+        if (eult_pemohon_umum($rolePemohon) && ! $this->tiket->layananBolehUntukUmum($kategoriDipilih)) {
+            log_message('warning', 'EULT Ticketing::save ditolak: layanan {layanan} tidak untuk pemohon umum ({identitas})', [
+                'layanan'   => $kategoriDipilih,
+                'identitas' => $identitasPemohon,
+            ]);
+            eult_message_kirim($this->judul . ' Gagal Disimpan, layanan tersebut tidak tersedia untuk pemohon umum. Pilih layanan publik, atau gunakan NIM/NIP kampus bila pemohon mahasiswa/pegawai UNMUL.', 'error');
         }
 
         // ---------------------------------------------------------------

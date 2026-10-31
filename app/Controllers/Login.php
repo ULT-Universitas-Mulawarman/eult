@@ -184,6 +184,29 @@ class Login extends BaseController
             ]);
         }
 
+        // Penegakan batas layanan pemohon umum DI SERVER.
+        //
+        // Menyaring dropdown saja tidak cukup: permintaan bisa dikirim
+        // langsung tanpa melewati UI. Role diambil dari session yang diisi
+        // getIdentitas(); identitas yang belum pernah diverifikasi
+        // diperlakukan sebagai umum (pilihan aman).
+        $identitasPemohon = (string) $this->request->getPost('ticketIdentitas');
+        $rolePemohon      = eult_pemohon_role($identitasPemohon);
+
+        if (eult_pemohon_umum($rolePemohon) && ! $this->tiket->layananBolehUntukUmum($kategoriDipilih)) {
+            eult_captcha_generate(4);
+            log_message('warning', 'EULT savetiket ditolak: layanan {layanan} tidak untuk pemohon umum ({identitas})', [
+                'layanan'   => $kategoriDipilih,
+                'identitas' => $identitasPemohon,
+            ]);
+
+            return $this->response->setJSON([
+                'status'      => 'danger',
+                'message'     => 'Layanan yang Anda pilih tidak tersedia untuk pemohon umum. Silakan pilih layanan lain, atau gunakan NIM/NIP kampus bila Anda mahasiswa/pegawai UNMUL.',
+                'new_captcha' => $this->urlGambarCaptcha(),
+            ]);
+        }
+
         $nama     = (string) $this->request->getPost('ticketName');
         $email    = (string) $this->request->getPost('ticketEmail');
         $kodeAcak = eult_generate_kode();
@@ -392,6 +415,9 @@ class Login extends BaseController
         $mhs = $this->osm->mhsId2($id);
 
         if (is_object($mhs) && ! empty($mhs->nim)) {
+            // Terverifikasi OSM sebagai mahasiswa -> boleh semua layanan.
+            eult_pemohon_role_simpan($id, 'internal');
+
             return $this->response->setJSON([
                 'status'  => true,
                 'ismhs'   => true,
@@ -402,6 +428,9 @@ class Login extends BaseController
         $pegawai = $this->osm->pegawaiId($id);
         if ($pegawai == true) {
             $nama = is_object($pegawai) ? ($pegawai->nama ?? '') : '';
+
+            // Terverifikasi OSM sebagai pegawai -> boleh semua layanan.
+            eult_pemohon_role_simpan($id, 'internal');
 
             return $this->response->setJSON([
                 'status'      => true,
@@ -418,7 +447,12 @@ class Login extends BaseController
         //   16 digit -> NIK KTP
         // NIM/NIP yang ditemukan di OSM sudah ditangani di atas; blok ini
         // hanya berlaku bila OSM tidak mengembalikan data.
+        //
+        // Pemohon umum DIBATASI ke layanan publik (lihat
+        // ModelMaster::layananUmumIds()) — bukan seluruh layanan kampus.
         if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
+            eult_pemohon_role_simpan($id, 'umum');
+
             return $this->response->setJSON([
                 'status' => true,
                 'umum'   => true,
@@ -433,7 +467,12 @@ class Login extends BaseController
     {
         $id = (string) $this->request->getPost('id');
 
-        $datas = $id === 'true' ? $this->masuk->getLayanan() : $this->masuk->getLayanan($id);
+        // Pemohon umum hanya melihat layanan publik. Role dibaca dari session
+        // yang diisi getIdentitas() — bukan dari parameter klien, agar tidak
+        // bisa dipalsukan lewat POST.
+        $hanyaUmum = $id !== 'true' || eult_pemohon_umum();
+
+        $datas = $this->masuk->getLayanan($hanyaUmum);
 
         if ($datas !== false && !empty($datas)) {
             $currentGroup = null;

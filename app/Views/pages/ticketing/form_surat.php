@@ -7,45 +7,38 @@
                 <div class="kt-portlet__head">
                     <div class="kt-portlet__head-label">
                         <h3 class="kt-portlet__head-title">
-                            <?= strtoupper($page_judul) ?>
+                            <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                         </h3>
                     </div>
                 </div>
 
                 <!--begin::Form-->
-                <form class="kt-form" action="<?= esc($save_url) ?>" method="post" id="form_surat">
+                <form class="kt-form" action="<?= esc($save_url ?? '') ?>" method="post" id="form_surat">
                     <div class="kt-portlet__body">
                         <?= csrf_field() ?>
                         <input type="hidden" name="suratTrackingId" id="suratTrackingId" value="<?= esc($kunci ?? '', 'attr') ?>">
-                        <input type="hidden" name="suratIdOld" value="<?= $datas != FALSE ? service('enkripsi')->encode($datas['suratId']) : ''; ?>">
+                        <input type="hidden" name="suratIdOld" value="<?= ($datas != false && ! empty($datas['suratId'])) ? esc(service('enkripsi')->encode((string) $datas['suratId']), 'attr') : ''; ?>">
                         <div class="form-group">
                             <label>Nomor Surat <strong style="color:red">*</strong></label>
-                            <input class="form-control" type="text" name="suratNomor" value="<?= $datas != FALSE ? $datas['suratNomor'] : (empty($surat) ? '' : $surat['tsuratNomor']) ?>">
+                            <input class="form-control" type="text" name="suratNomor" value="<?= esc($datas != false ? ($datas['suratNomor'] ?? '') : (empty($surat) ? '' : ($surat['tsuratNomor'] ?? '')), 'attr') ?>">
                         </div>
                         <div class="form-group">
                             <label>Jenis Surat <strong style="color:red">*</strong></label>
-                            <input class="form-control" type="text" name="suratJenis" value="<?= $datas != FALSE ? $datas['suratJenis'] : (empty($surat) ? '' : $surat['tsuratPerihal']) ?>">
+                            <input class="form-control" type="text" name="suratJenis" value="<?= esc($datas != false ? ($datas['suratJenis'] ?? '') : (empty($surat) ? '' : ($surat['tsuratPerihal'] ?? '')), 'attr') ?>">
                         </div>
-                        <!-- <div class="form-group">
-                            <label>Nomor Surat <strong style="color:red">*</strong></label>
-                            <input class="form-control" type="text" name="suratNomor">
-                        </div> -->
                         <div class="form-group">
                             <label>Perihal <strong style="color:red">*</strong></label>
-                            <input class="form-control" type="text" name="suratPerihal" value="<?= $datas != FALSE ? $datas['suratPerihal'] : (empty($surat) ? '' : $surat['tsuratPerihal']) ?>">
+                            <input class="form-control" type="text" name="suratPerihal" value="<?= esc($datas != false ? ($datas['suratPerihal'] ?? '') : (empty($surat) ? '' : ($surat['tsuratPerihal'] ?? '')), 'attr') ?>">
                         </div>
-                        <?php               
-                        if ($surat != false): ?>
+                        <?php if (! empty($surat)) : ?>
                         <div class="form-group">
                             <label>Lampiran</label>
-                            <input class="form-control" type="text" name="suratLampiran" value="<?= $datas != FALSE ? $datas['suratLampiran'] : (empty($surat) ? '' : $surat['tsuratLampiran']) ?>">
+                            <input class="form-control" type="text" name="suratLampiran" value="<?= esc($datas != false ? ($datas['suratLampiran'] ?? '') : ($surat['tsuratLampiran'] ?? ''), 'attr') ?>">
                         </div>
                         <div class="form-group">
                             <label>Tujuan Surat</label>
                             <div class="kt-tinymce">
-                                <textarea class="form-control kt-tinymce-4" id="suratTujuan" name="suratTujuan" class="tox-target" rows="25">
-                                    <?= $datas != FALSE ? $datas['suratTujuan'] : (empty($surat) ? '' : $surat['tsuratTujuan']) ?>
-                                </textarea>
+                                <textarea class="form-control kt-tinymce-4" id="suratTujuan" name="suratTujuan" rows="25"><?= esc($datas != false ? ($datas['suratTujuan'] ?? '') : ($surat['tsuratTujuan'] ?? '')) ?></textarea>
                             </div>
                             <span class="form-text text-muted">* Harap diperhatikan tulisan dalam kurung cetak tebal.</span>
                         </div>
@@ -53,25 +46,21 @@
                         <div class="form-group">
                             <label>Isi Surat <strong style="color:red">*</strong></label>
                             <div class="kt-tinymce">
-                                <textarea class="form-control kt-tinymce-4" id="suratBody" name="suratBody" class="tox-target" rows="25">
-                                    <?= $datas != FALSE ? $datas['suratBody'] : (empty($surat) ? '' : $surat['tsuratIsi']) ?>
-                                </textarea>
+                                <textarea class="form-control kt-tinymce-4" id="suratBody" name="suratBody" rows="25"><?= esc($datas != false ? ($datas['suratBody'] ?? '') : (empty($surat) ? '' : ($surat['tsuratIsi'] ?? ''))) ?></textarea>
                             </div>
                             <span class="form-text text-muted">* Harap diperhatikan tulisan dalam kurung cetak tebal.</span>
                         </div>
                         <div class="form-group">
                             <label>Tembusan <strong style="color:red">*</strong></label>
                             <div class="kt-tinymce">
-                                <textarea class="form-control kt-tinymce-4" id="suratFooter" name="suratFooter" class="tox-target" rows="25">
-                                    <?= $datas != FALSE ? $datas['suratFooter'] : (empty($surat) ? '' : $surat['tsuratFooter']) ?>
-                                </textarea>
+                                <textarea class="form-control kt-tinymce-4" id="suratFooter" name="suratFooter" rows="25"><?= esc($datas != false ? ($datas['suratFooter'] ?? '') : (empty($surat) ? '' : ($surat['tsuratFooter'] ?? ''))) ?></textarea>
                             </div>
                             <span class="form-text text-muted">* Harap diperhatikan tulisan dalam kurung cetak tebal.</span>
                         </div>
                         <div class="form-group">
                             <label>Tanggal Surat <strong style="color:red">*</strong></label>
                             <div class="input-group date">
-                                <input type="text" autocomplete="off" class="form-control" placeholder="Select date" id="kt_datepicker_4" name="suratTanggal" value="<?= $datas != false ? $datas['suratTanggal'] : '' ?>" />
+                                <input type="text" autocomplete="off" class="form-control" placeholder="Select date" id="kt_datepicker_4" name="suratTanggal" value="<?= esc($datas != false ? ($datas['suratTanggal'] ?? '') : '', 'attr') ?>" />
                                 <div class="input-group-append">
                                     <span class="input-group-text">
                                         <i class="la la-calendar-check-o"></i>
@@ -84,8 +73,10 @@
                             <select class="form-control m-select2" name="suratPejabatJabatanAnDraft">
                                 <option value="">Tidak Ada</option>
                                 <?php
-                                foreach ($pejabatTtd as $row) :
-                                    echo '<option value="' . $row['unitPejabatJabatan'] . '" ' . ($datas != false ? ($datas['suratPejabatJabatanAnDraft'] == $row['unitPejabatJabatan'] ? 'selected' : '') : '') . '>' . $row['unitPejabatJabatan'] . '</option>';
+                                foreach (($pejabatTtd ?? []) as $row) :
+                                    $jabatan = (string) ($row['unitPejabatJabatan'] ?? '');
+                                    $terpilihAn = ($datas != false && ($datas['suratPejabatJabatanAnDraft'] ?? '') == $jabatan) ? 'selected' : '';
+                                    echo '<option value="' . esc($jabatan, 'attr') . '" ' . $terpilihAn . '>' . esc($jabatan) . '</option>';
                                 endforeach;
                                 ?>
                             </select>
@@ -96,8 +87,13 @@
                             <select class="form-control m-select2" name="suratPejabatNIPDraft">
                                 <option value=""></option>
                                 <?php
-                                foreach ($pejabatTtd as $row) :
-                                    echo '<option value="' . $row['unitPejabatNIP'].';'.$row['unitPejabatJabatan'].';'.$row['unitPejabatNama']. '" ' . ($datas != false ? ($datas['suratPejabatNIPDraft'] == $row['unitPejabatNIP'] ? 'selected' : '') : '') . '>' . $row['unitPejabatJabatan'] . '</option>';
+                                foreach (($pejabatTtd ?? []) as $row) :
+                                    $nipPejabat  = (string) ($row['unitPejabatNIP'] ?? '');
+                                    $jabPejabat  = (string) ($row['unitPejabatJabatan'] ?? '');
+                                    $namaPejabat = (string) ($row['unitPejabatNama'] ?? '');
+                                    $nilaiOpsi   = $nipPejabat . ';' . $jabPejabat . ';' . $namaPejabat;
+                                    $terpilihNip = ($datas != false && ($datas['suratPejabatNIPDraft'] ?? '') == $nipPejabat) ? 'selected' : '';
+                                    echo '<option value="' . esc($nilaiOpsi, 'attr') . '" ' . $terpilihNip . '>' . esc($jabPejabat) . '</option>';
                                 endforeach;
                                 ?>
                             </select>
@@ -107,7 +103,7 @@
                     <div class="kt-portlet__foot">
                         <div class="kt-form__actions">
                             <button type="submit" id="btn_save" class="btn btn-primary">Save</button>
-                            <a href="<?= $preview_url ?>" id="btn_preview" class="btn btn-secondary">Preview</a>
+                            <a href="<?= esc($preview_url ?? '#') ?>" id="btn_preview" class="btn btn-secondary">Preview</a>
                         </div>
                     </div>
                 </form>

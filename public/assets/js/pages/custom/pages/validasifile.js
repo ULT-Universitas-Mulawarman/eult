@@ -393,13 +393,15 @@ var KTValidasifile = function () {
             });
         });
 
-        // Restore selected
+        // Pemulihan berkas terpilih (folder asal tiap berkas diselesaikan oleh backend melalui manifest.json)
         $('#btn-restore-selected').on('click', function () {
             var selected = [];
             var folder = 'ticketing';
             $('.row-check-quarantine:checked').each(function () {
                 selected.push($(this).val());
-                folder = $(this).data('folder') || folder;
+                if (selected.length === 1) {
+                    folder = $(this).data('folder') || folder;
+                }
             });
 
             if (selected.length === 0) return;

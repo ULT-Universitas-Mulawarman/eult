@@ -96,8 +96,52 @@ if (! function_exists('eult_pemohon_umum')) {
      */
     function eult_pemohon_umum(?string $role = null): bool
     {
-        $role ??= eult_pemohon_role_terakhir();
+        // Hanya baca role terakhir dari sesi jika pemanggil tidak mengirim argumen sama sekali
+        if (func_num_args() === 0) {
+            $role = eult_pemohon_role_terakhir();
+        }
 
         return $role !== 'internal';
+    }
+}
+
+if (! function_exists('eult_pemohon_nama_simpan')) {
+    /**
+     * Menyimpan nama resmi hasil verifikasi OSM untuk nomor identitas tertentu ke sesi.
+     */
+    function eult_pemohon_nama_simpan(string $identitas, string $nama): void
+    {
+        $namaBersih = trim($nama);
+        if ($identitas === '' || $namaBersih === '') {
+            return;
+        }
+
+        $sesi = session();
+        $peta = $sesi->get('eult_pemohon_nama');
+        $peta = is_array($peta) ? $peta : [];
+
+        $peta[$identitas] = $namaBersih;
+        if (count($peta) > 5) {
+            $peta = array_slice($peta, -5, null, true);
+        }
+
+        $sesi->set('eult_pemohon_nama', $peta);
+    }
+}
+
+if (! function_exists('eult_pemohon_nama')) {
+    /**
+     * Mengambil nama resmi pemohon terverifikasi OSM dari sesi, atau null jika belum tercatat.
+     */
+    function eult_pemohon_nama(string $identitas): ?string
+    {
+        $peta = session()->get('eult_pemohon_nama');
+        if (! is_array($peta) || ! isset($peta[$identitas])) {
+            return null;
+        }
+
+        $nama = trim((string) $peta[$identitas]);
+
+        return $nama !== '' ? $nama : null;
     }
 }

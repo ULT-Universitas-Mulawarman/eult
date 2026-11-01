@@ -168,6 +168,7 @@ class Filters extends BaseFilters
         ],
         'guest' => [
             'before' => [
+                '/',
                 'login',
             ],
         ],
@@ -194,6 +195,11 @@ class Filters extends BaseFilters
         'throttle:login/cektiket' => [
             'before' => [
                 'login/cektiket',
+            ],
+        ],
+        'throttle:cektiket/rating' => [
+            'before' => [
+                'cektiket/rating/*',
             ],
         ],
     ];

@@ -31,7 +31,7 @@ class Hakakseslayanan extends BaseController
         $data['s_user_group'] = $this->matriks->tabelRef('s_user_group');
         $data['show_url']     = site_url($this->controllerName . '/response') . '/';
 
-        return view($this->pathPage . 'response', $data);
+        return view($this->template, $data);
     }
 
     public function response(): string
@@ -62,15 +62,28 @@ class Hakakseslayanan extends BaseController
             eult_message_kirim('Pilih Menu!! Minimal 1', 'error');
         }
 
-        $this->matriks->hapus('s_group_category', ['sgroupSgroupId' => $grup]);
+        // Bungkus penghapusan dan penyisipan ulang hak akses layanan dalam satu transaksi
+        $db = $this->matriks->dbAktif();
+        $db->transStart();
+        $berhasil = $this->matriks->hapus('s_group_category', ['sgroupSgroupId' => $grup]);
 
-        foreach ($dipilih as $modul) {
-            $kategori = $this->matriks->ambilSatu('r_category_sub', ['sCatId' => $modul]);
-            $this->matriks->tambah('s_group_category', [
-                'sgroupCategoryId'    => $kategori !== false ? $kategori['sCatCategoryId'] : null,
-                'sgroupSubCategoryId' => $modul,
-                'sgroupSgroupId'      => $grup,
-            ]);
+        if ($berhasil) {
+            foreach ($dipilih as $modul) {
+                $kategori = $this->matriks->ambilSatu('r_category_sub', ['sCatId' => $modul]);
+                if (! $this->matriks->tambah('s_group_category', [
+                    'sgroupCategoryId'    => $kategori !== false ? $kategori['sCatCategoryId'] : null,
+                    'sgroupSubCategoryId' => $modul,
+                    'sgroupSgroupId'      => $grup,
+                ])) {
+                    $berhasil = false;
+                    break;
+                }
+            }
+        }
+        $db->transComplete();
+
+        if (! $db->transStatus() || ! $berhasil) {
+            eult_message_kirim($this->judul . ' Gagal Disimpan', 'error');
         }
 
         eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');

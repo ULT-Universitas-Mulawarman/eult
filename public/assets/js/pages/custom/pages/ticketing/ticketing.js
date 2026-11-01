@@ -138,7 +138,7 @@ const KTTicketing = function () {
                             });
                         }
                         KTApp.unprogress($this);
-                        $this.text = 'Save';
+                        $($this).text('Save');
                     },
                     error: () => {
                         KTApp.unprogress($this);
@@ -148,7 +148,7 @@ const KTTicketing = function () {
                 });
             } else {
                 KTApp.unprogress($this);
-                $this.text = 'Save';
+                $($this).text('Save');
             }
         });
     }
@@ -353,12 +353,12 @@ const KTTicketing = function () {
                 btnSimpan.trigger('click');
             });
             const btnCheck = $('#btn_check');
-            btnCheck.on('click', e => {
+            btnCheck.off('click').on('click', e => {
                 const $this = e.currentTarget;
                 e.preventDefault();
                 const $_id = $("[name='ticketIdentitas']").val();
-                const text_old = $this.text;
-                $this.text = 'Sedang Memproses';
+                const text_old = $($this).text();
+                $($this).text('Sedang Memproses');
                 $this.disabled = true;
                 KTApp.progress($this);
                 if ($_id == '') {
@@ -366,7 +366,7 @@ const KTTicketing = function () {
                         text: 'Silakan Isi Identitas',
                         type: 'error'
                     });
-                    $this.text = text_old;
+                    $($this).text(text_old);
                     $this.disabled = false;
                     KTApp.unprogress($this);
                 } else {
@@ -395,10 +395,16 @@ const KTTicketing = function () {
                                 });
                                 loadLayanan(false);
                             }
-                            $this.text = text_old;
+                            $($this).text(text_old);
                             $this.disabled = false;
                             KTApp.unprogress($this);
 
+                        },
+                        error: () => {
+                            $($this).text(text_old);
+                            $this.disabled = false;
+                            KTApp.unprogress($this);
+                            eultAjaxGalat();
                         }
                     });
                 }
@@ -523,7 +529,8 @@ const KTTicketing = function () {
             const mdPesanValidasi = $('#pesan_validasi');
             const mdEktm = $('#ektm');
 
-            mdNoSurat.on('show.bs.modal', function (event) {
+            // Lepas event lama sebelum mendaftarkan ulang agar tidak menggandakan panggilan AJAX
+            mdNoSurat.off('show.bs.modal').on('show.bs.modal', function (event) {
                 var button = $(event.relatedTarget) // Button that triggered the modal
                 var keys = button.data('linkkeys') // Extract info from data-* attributes
                 // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
@@ -534,7 +541,7 @@ const KTTicketing = function () {
                 modal.find('#f_nomor_tiket').val(keys)
             })
 
-            mdPesanValidasi.on('show.bs.modal', function (event) {
+            mdPesanValidasi.off('show.bs.modal').on('show.bs.modal', function (event) {
                 var button = $(event.relatedTarget) // Button that triggered the modal
                 var keys = button.data('linkkeys') // Extract info from data-* attributes
                 // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
@@ -544,7 +551,7 @@ const KTTicketing = function () {
                 modal.find('#f_nomor_tiket_validasi').val(keys)
             })
 
-            mdPesanTolak.on('show.bs.modal', function (event) {
+            mdPesanTolak.off('show.bs.modal').on('show.bs.modal', function (event) {
                 var button = $(event.relatedTarget) // Button that triggered the modal
                 var keys = button.data('linkkeys') // Extract info from data-* attributes
                 // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
@@ -554,7 +561,7 @@ const KTTicketing = function () {
                 modal.find('#f_nomor_tiket_tolak').val(keys)
             })
 
-            mdEktm.on('show.bs.modal', function (event) {
+            mdEktm.off('show.bs.modal').on('show.bs.modal', function (event) {
                 var button = $(event.relatedTarget) // Button that triggered the modal
                 var keys = button.data('linkkeys') // Extract info from data-* attributes
                 // If necessary, you could initiate an AJAX request here (and then do the updating in a callback).
@@ -600,7 +607,7 @@ const KTTicketing = function () {
                     });
                 });
             }
-            btnReject.on('click', e => {
+            btnReject.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -614,7 +621,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnTerima.on('click', e => {
+            btnTerima.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 swal.fire({
@@ -642,7 +649,7 @@ const KTTicketing = function () {
                     });
                 });
             });
-            btnFinish.on('click', e => {
+            btnFinish.off('click').on('click', e => {
                 e.preventDefault();
                 const url = $("#f_nomor_tiket").val();
                 const val = $("#f_nomor_surat").val();
@@ -682,7 +689,7 @@ const KTTicketing = function () {
                     })
                 }
             });
-            btnEktm.on('click', e => {
+            btnEktm.off('click').on('click', e => {
                 e.preventDefault();
                 const url       = $("#f_nomor_tiket_ektm").val();
                 const nsPemohon = $("#ns_pemohon").val();
@@ -732,7 +739,7 @@ const KTTicketing = function () {
                     })
                 }
             });
-            btnFinish3.on('click', e => {
+            btnFinish3.off('click').on('click', e => {
                 e.preventDefault();
                 const url = $("#f_nomor_tiket_validasi").val();
                 const val = $("#f_pesan_validasi").val();
@@ -779,7 +786,7 @@ const KTTicketing = function () {
                     })
                 }
             });
-            btnFinish2.on('click', e => {
+            btnFinish2.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 swal.fire({
@@ -807,7 +814,7 @@ const KTTicketing = function () {
                     });
                 });
             });
-            btnDeliver.on('click', e => {
+            btnDeliver.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -822,7 +829,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnDelivered.on('click', e => {
+            btnDelivered.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -837,7 +844,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnAssign.on('click', e => {
+            btnAssign.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -852,7 +859,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnAccept.on('click', e => {
+            btnAccept.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -867,7 +874,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnEdit.on('click', e => {
+            btnEdit.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -884,7 +891,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnValidate.on('click', e => {
+            btnValidate.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 $.ajax({
@@ -899,7 +906,7 @@ const KTTicketing = function () {
                     }
                 });
             });
-            btnDelete.on('click', e => {
+            btnDelete.off('click').on('click', e => {
                 e.preventDefault();
                 const $this = e.currentTarget;
                 swal.fire({
@@ -927,7 +934,7 @@ const KTTicketing = function () {
                     });
                 });
             });
-            btnTolak.on('click', e => {
+            btnTolak.off('click').on('click', e => {
                 e.preventDefault();
                 const url = $("#f_nomor_tiket_tolak").val();
                 const val = $("#f_pesan_tolak").val();

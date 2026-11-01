@@ -89,7 +89,8 @@ if (! function_exists('eult_auto_increment')) {    /**
         $terakhir = $model->getByLastId($tabel, $kolom, $kondisi);
 
         if (! empty($terakhir) && isset($terakhir[$kolom])) {
-            $id = $nip . sprintf('%04d', (int) substr((string) $terakhir[$kolom], 12, 4) + 1);
+            // Ambil 4 digit nomor urut paling kanan agar tidak bergantung pada panjang prefix
+            $id = $nip . sprintf('%04d', (int) substr((string) $terakhir[$kolom], -4) + 1);
         } else {
             $id = $nip . '0001';
         }

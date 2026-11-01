@@ -97,6 +97,16 @@
 			</p>
 			<span class="sub-title">Nomor : <?= $datas != FALSE ? $datas['suratNomor'] : '' ?></span>
 		</div>
+		<?php
+		$isObjMhs    = is_object($mahasiswa ?? false);
+		$namaMhs     = $isObjMhs ? (string) ($mahasiswa->name ?? ($mahasiswa->peserta_didik->nama ?? '')) : '';
+		$nimMhs      = $isObjMhs ? (string) ($mahasiswa->nim ?? '') : '';
+		$ipkRaw      = $isObjMhs ? ($mahasiswa->ipk ?? ($mahasiswa->registrasi_mahasiswa->ipk ?? 0)) : 0;
+		$ipkMhs      = is_numeric($ipkRaw) ? (float) $ipkRaw : 0.0;
+		$fakultasMhs = $isObjMhs ? (string) ($mahasiswa->faculty_name ?? ($mahasiswa->program_studi->nama_fakultas ?? '')) : '';
+		$prodiMhs    = $isObjMhs ? (string) ($mahasiswa->departement_name ?? ($mahasiswa->program_studi->nama_prodi ?? ($mahasiswa->program_studi->nama ?? ''))) : '';
+		$jenjangMhs  = $isObjMhs ? (string) ($mahasiswa->degree ?? ($mahasiswa->program_studi->jenjang ?? ($mahasiswa->program_studi->jenjang_didik->nama ?? ''))) : '';
+		?>
 		<div class="paragraf">
 			<p>Rektor Universitas Mulawarman, dengan ini menerangkan bahwa :</p>
 			<div class="elem-center ">
@@ -104,32 +114,32 @@
 					<tr>
 						<td style="width:4.5cm">Nama</td>
 						<td style="width:10px">:</td>
-						<td class="uppercase"><?= $mahasiswa != false ? $mahasiswa->name : '' ?></td>
+						<td class="uppercase"><?= $namaMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">NIM</td>
 						<td style="width:10px">:</td>
-						<td><?= $mahasiswa != false ? $mahasiswa->nim : '' ?></td>
+						<td><?= $nimMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">IPK</td>
 						<td style="width:10px">:</td>
-						<td><?= $mahasiswa != false ? number_format($mahasiswa->ipk, 2) : '' ?></td>
+						<td><?= $isObjMhs ? number_format($ipkMhs, 2) : '' ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Fakultas</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->faculty_name : '' ?></td>
+						<td class="capitalize"><?= $fakultasMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Program Studi</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->departement_name : '' ?></td>
+						<td class="capitalize"><?= $prodiMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Jenjang Studi</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->degree : '' ?></td>
+						<td class="capitalize"><?= $jenjangMhs ?></td>
 					</tr>
 				</table>
 			</div>

@@ -47,9 +47,13 @@ class Laporan extends BaseController
         $tanggal  = (string) $this->request->getPost('rentangTanggal');
         session()->set('tanggal', $tanggal);
 
-        $pecah        = explode('/', str_replace(' ', '', $tanggal));
-        $tanggalAwal  = date('Y-m-d', strtotime($pecah[0]));
-        $tanggalAkhir = date('Y-m-d', strtotime($pecah[1]));
+        $pecah = explode('/', str_replace(' ', '', $tanggal));
+        if (count($pecah) !== 2 || $pecah[0] === '' || $pecah[1] === '' || strtotime($pecah[0]) === false || strtotime($pecah[1]) === false) {
+            eult_message_kirim('Format rentang tanggal tidak valid.', 'error');
+        }
+
+        $tanggalAwal  = date('Y-m-d', (int) strtotime($pecah[0]));
+        $tanggalAkhir = date('Y-m-d', (int) strtotime($pecah[1]));
         $datas        = $this->laporan->getLaporan([$tanggalAwal, $tanggalAkhir]);
 
         $data               = $this->getMaster($this->pathPage . $this->pageIndex);

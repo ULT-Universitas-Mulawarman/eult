@@ -115,6 +115,7 @@
                                                             'urut'            => $i,
                                                             'disposisiIsTrue' => $istrue,
                                                             'suratCreated'    => $suratistrue,
+                                                            'suratNomor'      => $row['suratNomor'] ?? '',
                                                             'jenis'           => $row['sCatDisposisi'] ?? null,
                                                             'isVerified'      => $row['ticketIsVerified'] ?? 0,
                                                             'isRejected'      => $row['disposisiIsRejected'] ?? 0,

@@ -112,11 +112,12 @@ class Validasifile extends BaseController
         $daftar = $this->request->getPost('files');
 
         if ($mode === 'all') {
+            // Mode 'all' memulihkan seluruh berkas terkarantina lintas folder ke folder asalnya masing-masing
             $karantina = $this->berkas->getQuarantinedList();
             $daftar    = [];
             foreach ($karantina as $q) {
-                if ($q['folder'] === $folder) {
-                    $daftar[] = $q['filename'];
+                if (! empty($q['filename'])) {
+                    $daftar[] = (string) $q['filename'];
                 }
             }
         }

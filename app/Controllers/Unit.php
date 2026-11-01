@@ -58,7 +58,9 @@ class Unit extends BaseController
         $data['scripts']     = [];
         $data['save_url']    = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Update';
-        $data['datas']       = $this->unit->ambilSatu('s_unit', ['unitId' => $terbuka]);
+        $data['datas']       = (is_string($terbuka) && $terbuka !== '')
+            ? $this->unit->ambilSatu('s_unit', ['unitId' => $terbuka])
+            : false;
 
         return view($this->template, $data);
     }
@@ -90,6 +92,12 @@ class Unit extends BaseController
     {
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
+
+        // Tolak kunci rusak/kosong sebelum menyentuh query DELETE
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci unit tidak valid.', 'error');
+        }
+
         $proses  = $this->unit->hapus('s_unit', ['unitId' => $terbuka]);
 
         if (! empty($proses)) {

@@ -28,7 +28,7 @@ class Hakaksesunit extends BaseController
     {
         $data                 = $this->getMaster($this->pathPage . $this->pageIndex);
         $data['scripts']      = ['user/' . $this->controllerName];
-        $data['s_user_group'] = $this->matriks->tabelRef('s_user_group');
+        $data['s_user_group'] = $this->matriks->daftarGrupDenganUnit();
         $data['show_url']     = site_url($this->controllerName . '/response') . '/';
 
         return view($this->template, $data);
@@ -63,15 +63,28 @@ class Hakaksesunit extends BaseController
             eult_message_kirim('Pilih Unit!! Minimal 1', 'error');
         }
 
-        $this->matriks->hapus('s_user_group_unit', ['sgroupunitSgroupNama' => $grup]);
+        // Bungkus penghapusan dan penyisipan ulang hak akses unit dalam satu transaksi
+        $db = $this->matriks->dbAktif();
+        $db->transStart();
+        $berhasil = $this->matriks->hapus('s_user_group_unit', ['sgroupunitSgroupNama' => $grup]);
 
-        foreach ($dipilih as $unit) {
-            $this->matriks->tambah('s_user_group_unit', [
-                'sgroupunitSgroupNama' => $grup,
-                'sgroupunitUnitId'     => $unit,
-                'sgroupunitUnitRead'   => 1,
-                'sgroupunitIsHome'     => isset($isHome[$unit]) ? $isHome[$unit] : 0,
-            ]);
+        if ($berhasil) {
+            foreach ($dipilih as $unit) {
+                if (! $this->matriks->tambah('s_user_group_unit', [
+                    'sgroupunitSgroupNama' => $grup,
+                    'sgroupunitUnitId'     => $unit,
+                    'sgroupunitUnitRead'   => 1,
+                    'sgroupunitIsHome'     => isset($isHome[$unit]) ? $isHome[$unit] : 0,
+                ])) {
+                    $berhasil = false;
+                    break;
+                }
+            }
+        }
+        $db->transComplete();
+
+        if (! $db->transStatus() || ! $berhasil) {
+            eult_message_kirim($this->judul . ' Gagal Disimpan', 'error');
         }
 
         eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');

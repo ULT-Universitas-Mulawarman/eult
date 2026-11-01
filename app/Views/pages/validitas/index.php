@@ -135,42 +135,42 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     <tr>
                                                         <td>NIM/NIP</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ? $datas['ticketIdentitas']: '' ?></td>
+                                                        <td><?= $datas != false ? esc($datas['ticketIdentitas'] ?? '') : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Nama</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ?$datas['ticketName'] :'' ?></td>
+                                                        <td><?= $datas != false ? esc($datas['ticketName'] ?? '') : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Email</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ?$datas['ticketEmail'] :'' ?></td>
+                                                        <td><?= $datas != false ? esc(eult_samarkan_email($datas['ticketEmail'] ?? '')) : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>No. HP</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ?$datas['ticketNoHp']:'' ?></td>
+                                                        <td><?= $datas != false ? esc(eult_samarkan_telepon($datas['ticketNoHp'] ?? '')) : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Nomor Tiket</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ? $datas['ticketTrackingId']:'' ?></td>
+                                                        <td><?= $datas != false ? esc($datas['ticketTrackingId'] ?? '') : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Tanggal Tiket</td>
                                                         <td>:</td>
-                                                        <td><?= $datas != false ? datetoindo($datas['ticketCreated']) . ' ' . date('h:i A', strtotime($datas['ticketCreated'])):'' ?></td>
+                                                        <td><?= $datas != false ? esc(datetoindo($datas['ticketCreated']) . ' ' . date('h:i A', strtotime($datas['ticketCreated']))) : '' ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Layanan</td>
                                                         <td>:</td>
-                                                        <td><?= $datas['sCatNama'] . ' - ' . $datas['categoryNama'] ?></td>
+                                                        <td><?= esc(($datas['sCatNama'] ?? '') . ' - ' . ($datas['categoryNama'] ?? '')) ?></td>
                                                     </tr>
                                                     <tr>
                                                         <td>Status Tiket</td>
                                                         <td>:</td>
-                                                        <td><?= $datas['statusNama'] ?></td>
+                                                        <td><?= esc($datas['statusNama'] ?? '') ?></td>
                                                     </tr>
                                                 </table>
                                                     

@@ -9,7 +9,7 @@
                 <div class="kt-portlet__head">
                     <div class="kt-portlet__head-label">
                         <h3 class="kt-portlet__head-title">
-                            <?=strtoupper($page_judul)?>
+                            <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                         </h3>
                     </div>
                 </div>
@@ -18,11 +18,11 @@
                 <form class="kt-form" action="<?= esc($save_url) ?>" method="post" id="form_form">
                     <div class="kt-portlet__body">
                         <?= csrf_field() ?>
-                        <input type="hidden" name="categoryIdOld" value="<?= esc($datas != false ? $datas['sCatId'] : '', 'attr') ?>">
-                        <input type="hidden" name="sCatCategoryId" value="<?= esc($datas != false ? $datas['sCatCategoryId'] : ($kunci ?? ''), 'attr') ?>">
+                        <input type="hidden" name="categoryIdOld" value="<?= esc($datas != false ? ($datas['sCatId'] ?? '') : '', 'attr') ?>">
+                        <input type="hidden" name="sCatCategoryId" value="<?= esc($datas != false ? ($datas['sCatCategoryId'] ?? '') : ($kunci ?? ''), 'attr') ?>">
                         <div class="form-group">
                             <label>Sub Layanan</label>
-                            <input type="text" class="form-control" name="sCategoryNama" placeholder="Sub Layanan" aria-describedby="categoryNama" value="<?=$datas!=false?$datas['sCatNama']:''?>">
+                            <input type="text" class="form-control" name="sCategoryNama" placeholder="Sub Layanan" aria-describedby="categoryNama" value="<?= $datas != false ? esc((string) ($datas['sCatNama'] ?? ''), 'attr') : '' ?>">
                         </div>
                         <div class="form-group">
                             <label>Jenis Disposisi</label>

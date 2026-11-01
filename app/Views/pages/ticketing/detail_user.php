@@ -995,6 +995,8 @@ $labelStatusLive = $selesai ? 'Selesai' : ($ditolak ? 'Tidak dilanjutkan' : 'Dal
                             const tokenBaru = xhr.getResponseHeader('X-CSRF-TOKEN');
                             if (tokenBaru) {
                                 $('meta[name="<?= esc(csrf_header(), 'attr') ?>"]').attr('content', tokenBaru);
+                                // Ikut perbarui hidden input CSRF pada form balasan non-AJAX di halaman yang sama
+                                $('input[name="<?= esc(csrf_token(), 'attr') ?>"]').val(tokenBaru);
                             }
 
                             // Respons error memakai HTTP 200 — periksa statusnya

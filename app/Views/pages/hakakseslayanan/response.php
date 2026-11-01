@@ -2,9 +2,9 @@
 <!-- begin:: Content -->
 
 <!--begin::Form-->
-<form action="<?=$save_url?>" method="post" id="form_custom">
+<form action="<?= esc($save_url ?? '') ?>" method="post" id="form_custom">
     <?= csrf_field() ?>
-<input type="hidden" name="sgroupSgroupId" value="<?=!empty($sgroupSgroupId)?$sgroupSgroupId:''?>">
+<input type="hidden" name="sgroupSgroupId" value="<?= ! empty($sgroupSgroupId) ? esc((string) $sgroupSgroupId, 'attr') : '' ?>">
 <div class="kt-container  kt-container--fluid  kt-grid__item kt-grid__item--fluid">
     <div class="row">
         <div class="col-md-12">
@@ -47,9 +47,9 @@
                                                     $cek="";
                                                 ?>
                                                 <tr>
-                                                    <th scope="row"><input type="checkbox" class="checked" <?=$cek?> name="cekModul[]" value="<?=$row['sCatId']?>"/></th>
-                                                    <td><?= $row['categoryNama'] ?></td>
-                                                    <td><?= $row['sCatNama'] ?></td>
+                                                    <th scope="row"><input type="checkbox" class="checked" <?= $cek ?> name="cekModul[]" value="<?= esc((string) ($row['sCatId'] ?? ''), 'attr') ?>"/></th>
+                                                    <td><?= esc((string) ($row['categoryNama'] ?? '')) ?></td>
+                                                    <td><?= esc((string) ($row['sCatNama'] ?? '')) ?></td>
                                                 </tr>
                                         <?php
                                             }

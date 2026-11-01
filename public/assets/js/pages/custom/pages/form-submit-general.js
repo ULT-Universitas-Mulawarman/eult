@@ -65,6 +65,19 @@ var FormGeneral = function() {
                 button.prop( "disabled", false );
                 button.removeClass('disabled');
                 button.text(button_text);  
+            },
+            error: function() {
+                // Pulihkan tombol simpan jika permintaan AJAX mengalami galat HTTP
+                button.prop("disabled", false);
+                button.removeClass('disabled');
+                button.text(button_text);
+                swal.fire({
+                    position: "top-right",
+                    type: "error",
+                    title: "Terjadi kesalahan jaringan atau server. Silakan coba lagi.",
+                    showConfirmButton: !1,
+                    timer: 2000
+                });
             }
         });
     }

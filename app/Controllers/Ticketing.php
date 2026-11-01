@@ -303,6 +303,12 @@ class Ticketing extends BaseController
         $grup            = (string) ($this->pengguna['susrSgroupNama'] ?? '');
         $pengguna        = $this->tiket->ambilSatu('s_user_group', ['sgroupNama' => $grup]);
         $arsip           = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $terbuka, 'archiveJenis' => 'TIKET']);
+
+        // Catat peran internal di sesi bila tiket eksisting memakai layanan internal
+        if (is_array($datas) && ! $this->tiket->layananBolehUntukUmum((string) ($datas['ticketCategories'] ?? ''))) {
+            eult_pemohon_role_simpan((string) ($datas['ticketIdentitas'] ?? ''), 'internal');
+        }
+
         $data            = [
             'page_judul'  => 'Tiket Unit Layanan Terpadu',
             'save_url'    => site_url($this->controllerName . '/save') . '/',
@@ -316,7 +322,7 @@ class Ticketing extends BaseController
             'layanan'     => $this->tiket->getLayanan(),
             'user_data'   => $this->pengguna['susrSgroupNama'],
             'r_priority'  => $this->tiket->tabelRef('r_priority'),
-            'archive_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $arsip['archiveFile'] : false,
+            'archive_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $this->enkripsi->encode((string) $arsip['archiveId']) : false,
         ];
 
         return $this->response->setJSON(['response' => view($this->pathPage . 'form', $data)]);
@@ -462,17 +468,7 @@ class Ticketing extends BaseController
 
         $mahasiswa = false;
         if ($identitas !== false) {
-            $mentah = $this->osm->mhsId2((string) $identitas['ticketIdentitas']);
-            if ($mentah) {
-                $mahasiswa = (object) [
-                    'nim'              => $mentah->nim ?? '',
-                    'name'             => $mentah->peserta_didik->nama ?? '',
-                    'ipk'              => $mentah->ipk ?? '',
-                    'faculty_name'     => $mentah->program_studi->nama_fakultas ?? '',
-                    'departement_name' => $mentah->program_studi->nama ?? '',
-                    'degree'           => $mentah->program_studi->jenjang ?? '',
-                ];
-            }
+            $mahasiswa = $this->normalisasiMahasiswa($this->osm->mhsId2((string) $identitas['ticketIdentitas']));
         }
         $pegawai = $identitas !== false ? $this->osm->pegawaiId((string) $identitas['ticketIdentitas']) : false;
 
@@ -551,7 +547,7 @@ class Ticketing extends BaseController
             'r_priority'         => $this->tiket->tabelRef('r_priority'),
             'page_judul'         => 'Disposisi Ticket to BO',
             '_event'             => 'assign',
-            'archive_first_url'  => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $arsip['archiveFile'] : false,
+            'archive_first_url'  => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $this->enkripsi->encode((string) $arsip['archiveId']) : false,
         ])]);
     }
 
@@ -562,6 +558,7 @@ class Ticketing extends BaseController
         }
 
         $idLama     = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
+        $this->pastikanTiketBelumFinal($idLama);
         $prioritas  = (string) $this->request->getPost('ticketPriority');
         $tujuanUnit = (string) $this->request->getPost('ticketAssign');
         $pesan      = (string) $this->request->getPost('ticketMessage');
@@ -652,7 +649,7 @@ class Ticketing extends BaseController
             'user_group'        => $this->pengguna['susrSgroupNama'],
             'r_priority'        => $this->tiket->tabelRef('r_priority'),
             'page_judul'        => 'Disposisi Ticket',
-            'archive_first_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $arsip['archiveFile'] : false,
+            'archive_first_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $this->enkripsi->encode((string) $arsip['archiveId']) : false,
         ])]);
     }
 
@@ -663,6 +660,7 @@ class Ticketing extends BaseController
         }
 
         $idLama     = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
+        $this->pastikanTiketBelumFinal($idLama);
         $prioritas  = (string) $this->request->getPost('ticketPriority');
         $tujuanUnit = (string) $this->request->getPost('ticketAssign');
         $pesan      = (string) $this->request->getPost('ticketMessage');
@@ -741,7 +739,7 @@ class Ticketing extends BaseController
             'loadpdf'           => site_url($this->controllerName . '/loadpdf') . '/',
             'user_group'        => $this->pengguna['susrSgroupNama'],
             'page_judul'        => 'Validasi Ticket',
-            'archive_first_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $arsip['archiveFile'] : false,
+            'archive_first_url' => $arsip !== false ? site_url($this->controllerName . '/loadpdf') . '/' . $this->enkripsi->encode((string) $arsip['archiveId']) : false,
         ])]);
     }
 
@@ -752,6 +750,7 @@ class Ticketing extends BaseController
         }
 
         $idLama    = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
+        $this->pastikanTiketBelumFinal($idLama);
         $terakhir  = $this->tiket->disposisiLast(['disposisiTicketId' => $idLama]);
         $unitAkhir = $terakhir !== false ? $terakhir['disposisiUnit'] : '';
         $pekerja   = $this->tiket->getTicketAssign('s_unit', ['unitId' => $unitAkhir]);
@@ -801,7 +800,7 @@ class Ticketing extends BaseController
         $datas = $this->tiket->byId(['ticketTrackingId' => $id]);
 
         $arsip  = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $id, 'archiveJenis' => 'TIKET']);
-        $output = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $id, 'archiveJenis' => 'OUTPUT']);
+        $output = $this->ambilArsipOutputTerbaru((string) $id);
 
         $this->tiket->ubah('d_replies', ['repliesRead' => '1'], ['repliesTicketId' => $id]);
 
@@ -877,10 +876,7 @@ class Ticketing extends BaseController
         // Email berkas adalah efek samping opsional: kegagalannya (SMTP
         // belum dikonfigurasi, berkas belum ada) TIDAK BOLEH menutupi
         // fakta bahwa penilaian sudah tersimpan.
-        $output = $this->tiket->tabelBuilder('d_archive')
-            ->where('archiveTrackingId', $nomorTiket)
-            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
-            ->get()->getRowArray() ?? false;
+        $output   = $this->ambilArsipOutputTerbaru((string) $nomorTiket);
         $lampiran = $output !== false ? $output['archiveFile'] : false;
 
         $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $nomorTiket, $datas, $lampiran);
@@ -901,6 +897,7 @@ class Ticketing extends BaseController
         }
 
         $terbuka = $this->tiketTerotorisasi($kunci);
+        $this->pastikanTiketBelumFinal((string) $terbuka);
         $proses  = $this->tiket->ubah('d_ticketing', [
             'ticketIsVerified' => 1,
             'ticketVerified'   => date('Y-m-d H:i:s'),
@@ -923,6 +920,7 @@ class Ticketing extends BaseController
         }
 
         $terbuka = $this->tiketTerotorisasi($kunci);
+        $this->pastikanTiketBelumFinal((string) $terbuka);
         $pesan   = (string) $this->request->getPost('pesan_tolak');
         $proses  = $this->tiket->ubah('d_ticketing', [
             'ticketStatus'     => 8,
@@ -949,7 +947,8 @@ class Ticketing extends BaseController
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
         // Kunci bisa berisi "idTiket;namaBerkas" (lihat cetaksurat) — otorisasi pada id tiketnya.
-        $this->tiketMentahTerotorisasi(is_string($terbuka) ? explode(';', $terbuka)[0] : '');
+        $idTiketUtama = $this->tiketMentahTerotorisasi(is_string($terbuka) ? explode(';', $terbuka)[0] : '');
+        $this->pastikanTiketBelumFinal($idTiketUtama);
 
         if ($mode === 'sehari' || $this->request->getPost('pesanvalidasi') !== null) {
             $pesan = (string) $this->request->getPost('pesanvalidasi');
@@ -982,7 +981,6 @@ class Ticketing extends BaseController
             }
 
             eult_save_history('Layanan telah diselesaikan oleh ' . $this->pengguna['susrProfil'] . '.<br/> Pesan: ' . $pesan, (string) $terbuka);
-            $this->kirimEmailSelesai((string) $terbuka);
         } else {
             $nomorSurat = (string) $this->request->getPost('nomor_surat');
             $gabung     = explode(';', (string) $terbuka);
@@ -1010,6 +1008,7 @@ class Ticketing extends BaseController
             $terbuka = $idTiket;
         }
 
+        // Kirim email notifikasi selesai tepat satu kali untuk kedua jalur validasi
         $this->kirimEmailSelesai((string) $terbuka);
 
         eult_message_kirim($this->judul . ' Berhasil Divalidasi dan Tiket telah Selesai', 'success');
@@ -1035,11 +1034,7 @@ class Ticketing extends BaseController
             return;
         }
 
-        $output = $this->tiket->tabelBuilder('d_archive')
-            ->where('archiveTrackingId', $idTiket)
-            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
-            ->orderBy('archiveId', 'DESC')
-            ->get()->getRowArray() ?? false;
+        $output   = $this->ambilArsipOutputTerbaru($idTiket);
         $lampiran = $output !== false ? ($output['archiveFile'] ?? false) : false;
 
         $terkirim = $this->email->selesai((string) $datas['ticketEmail'], 'Berkas Permintaan EULT UNMUL #' . $idTiket, $datas, $lampiran);
@@ -1052,6 +1047,7 @@ class Ticketing extends BaseController
     public function validasiEktm(string $kunci = '')
     {
         $terbuka       = $this->tiketTerotorisasi($kunci);
+        $this->pastikanTiketBelumFinal((string) $terbuka);
         $noPemohon     = (string) $this->request->getPost('ns_pemohon');
         $tglPemohon    = (string) $this->request->getPost('ts_pemohon');
         $noSurat        = (string) $this->request->getPost('ns_pengantar');
@@ -1099,15 +1095,9 @@ class Ticketing extends BaseController
         ]);
 
         $identitas = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $terbuka]);
-        $mentah    = $identitas !== false ? $this->osm->mhsId2((string) $identitas['ticketIdentitas']) : false;
-        $mahasiswa = $mentah ? (object) [
-            'nim'              => $mentah->nim ?? '',
-            'name'             => $mentah->peserta_didik->nama ?? '',
-            'ipk'              => $mentah->ipk ?? '',
-            'faculty_name'     => $mentah->program_studi->nama_fakultas ?? '',
-            'departement_name' => $mentah->program_studi->nama ?? '',
-            'degree'           => $mentah->program_studi->jenjang ?? '',
-        ] : false;
+        $mahasiswa = $identitas !== false
+            ? $this->normalisasiMahasiswa($this->osm->mhsId2((string) $identitas['ticketIdentitas']))
+            : false;
 
         $this->qr->generate(base_url('validitas') . '/' . $kunci, 'OUTPUT_' . $terbuka);
 
@@ -1172,6 +1162,10 @@ class Ticketing extends BaseController
     public function saveReplies()
     {
         if (! $this->validate(['repliesMessage' => 'required'])) {
+            // Alihkan kembali secara ramah jika form balasan dikirim secara native (non-AJAX)
+            if (! $this->isAjax()) {
+                return redirect()->back()->with('error', 'Pesan tanggapan wajib diisi.');
+            }
             eult_message_kirim('Ooops!! Something Wrong!!', 'error');
         }
 
@@ -1214,8 +1208,17 @@ class Ticketing extends BaseController
             eult_message_kirim('Ooops!! Something Wrong!!', 'error');
         }
 
-        $idLama   = (string) $this->request->getPost('ticketIdOld');
-        $kodeAcak = $idLama === '' ? eult_generate_kode() : '';
+        $idLama    = (string) $this->request->getPost('ticketIdOld');
+        $kodeAcak  = $idLama === '' ? eult_generate_kode() : '';
+        $tiketLama = false;
+
+        if ($idLama !== '') {
+            $idTiketTerotorisasi = $this->tiketMentahTerotorisasi($idLama);
+            $tiketLama           = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $idTiketTerotorisasi]);
+            if ($tiketLama === false) {
+                eult_message_kirim($this->judul . ' tidak ditemukan.', 'error');
+            }
+        }
 
         // Guard FK 1452: tolak kategori basi/tidak valid sebelum INSERT/UPDATE
         // agar pengguna mendapat pesan ramah, bukan pesan mentah MySQL.
@@ -1231,6 +1234,17 @@ class Ticketing extends BaseController
         // internal untuk pemohon ber-NIK.
         $identitasPemohon = (string) $this->request->getPost('ticketIdentitas');
         $rolePemohon      = eult_pemohon_role($identitasPemohon);
+
+        // Saat edit tiket eksisting dengan identitas yang tidak berubah dan layanan awal internal, pertahankan status internal
+        if (
+            $rolePemohon === null
+            && is_array($tiketLama)
+            && $identitasPemohon !== ''
+            && $identitasPemohon === (string) ($tiketLama['ticketIdentitas'] ?? '')
+            && ! $this->tiket->layananBolehUntukUmum((string) ($tiketLama['ticketCategories'] ?? ''))
+        ) {
+            $rolePemohon = 'internal';
+        }
 
         if (eult_pemohon_umum($rolePemohon) && ! $this->tiket->layananBolehUntukUmum($kategoriDipilih)) {
             log_message('warning', 'EULT Ticketing::save ditolak: layanan {layanan} tidak untuk pemohon umum ({identitas})', [
@@ -1288,17 +1302,21 @@ class Ticketing extends BaseController
                 'ticketSubject'    => (string) $this->request->getPost('ticketSubject'),
                 'ticketPriority'   => (string) $this->request->getPost('ticketPriority'),
                 'ticketMessage'    => (string) $this->request->getPost('ticketMessage'),
-                'ticketCreated'    => date('Y-m-d H:i:s'),
-                'ticketStatus'     => 1,
-                'ticketCreatedBy'  => $this->pengguna['susrProfil'],
-                'ticketArchiveId'  => $arsipId,
             ];
 
             if ($idLama === '') {
                 $param['ticketTrackingId'] = $idTiket;
+                $param['ticketCreated']    = date('Y-m-d H:i:s');
+                $param['ticketStatus']     = 1;
+                $param['ticketCreatedBy']  = $this->pengguna['susrProfil'];
+                $param['ticketArchiveId']  = $arsipId;
             } else {
                 $param['ticketUpdated']   = date('Y-m-d H:i:s');
                 $param['ticketUpdatedBy'] = $this->pengguna['susrProfil'];
+                // Hanya perbarui ID arsip utama jika ada berkas PDF baru yang diunggah
+                if ($periksaBerkas['ekstensi'] !== '') {
+                    $param['ticketArchiveId'] = $arsipId;
+                }
             }
 
             $konfig = [
@@ -1316,7 +1334,7 @@ class Ticketing extends BaseController
 
             $proses = $idLama === ''
                 ? $this->tiket->tambah('d_ticketing', $param)
-                : $this->tiket->ubah('d_ticketing', $param, ['ticketTrackingId' => $idLama]);
+                : $this->tiket->ubah('d_ticketing', $param, ['ticketTrackingId' => $idTiket]);
 
             if ($proses && $periksaBerkas['ekstensi'] !== '') {
                 $berkasTersimpan = eult_upload_simpan($berkas, $konfig, $paramFile, $periksaBerkas['ekstensi']);
@@ -1388,29 +1406,68 @@ class Ticketing extends BaseController
             return $this->response->setStatusCode(400)->setBody('Bad Request');
         }
 
-        $terbuka = $this->tiketTerotorisasi($kunci);
-        $arsip   = $this->tiket->tabelRef('d_archive', ['archiveTrackingId' => $terbuka]);
+        // Hanya ADMIN atau OPERATOR yang berwenang menghapus tiket
+        $grup = (string) ($this->pengguna['susrSgroupNama'] ?? '');
+        if ($grup !== 'ADMIN' && strpos($grup, 'OPERATOR') === false) {
+            $this->response->setStatusCode(403);
+            eult_message_kirim('Anda tidak memiliki wewenang menghapus tiket.', 'error');
+        }
 
+        $terbuka   = $this->tiketTerotorisasi($kunci);
+        $dataTiket = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $terbuka]);
+
+        if ($grup !== 'ADMIN' && is_array($dataTiket) && (int) ($dataTiket['ticketStatus'] ?? 0) !== 1) {
+            $this->response->setStatusCode(403);
+            eult_message_kirim('Operator hanya dapat menghapus tiket baru yang belum diproses.', 'error');
+        }
+
+        // Kumpulkan seluruh berkas fisik terkait sebelum penghapusan basis data
+        $daftarBerkasHapus = [
+            WRITEPATH . 'uploads/qrcode/' . $terbuka . '.png',
+            WRITEPATH . 'uploads/qrcode/TTD_' . $terbuka . '.png',
+            WRITEPATH . 'uploads/qrcode/OUTPUT_' . $terbuka . '.png',
+        ];
+
+        $arsip = $this->tiket->tabelRef('d_archive', ['archiveTrackingId' => $terbuka]);
         if ($arsip !== false) {
             foreach ($arsip as $row) {
-                @unlink(WRITEPATH . 'uploads/ticketing/' . basename((string) $row['archiveFile']));
+                $namaArsip = basename((string) ($row['archiveFile'] ?? ''));
+                if ($namaArsip !== '') {
+                    $daftarBerkasHapus[] = WRITEPATH . 'uploads/ticketing/' . $namaArsip;
+                }
             }
         }
 
-        // Seluruh baris terkait tiket dihapus dalam satu transaksi; file
-        // fisik dihapus lebih dulu di luar transaksi (unlink tidak bisa
-        // di-rollback, dan baris d_archive yang hilang cukup menandai
-        // berkas yatim bila transaksi gagal).
+        $balasan = $this->tiket->tabelRef('d_replies', ['repliesTicketId' => $terbuka]);
+        if ($balasan !== false) {
+            foreach ($balasan as $row) {
+                $namaLampiranChat = basename((string) ($row['repliesFile'] ?? ''));
+                if ($namaLampiranChat !== '') {
+                    $daftarBerkasHapus[] = WRITEPATH . 'uploads/chat/' . $namaLampiranChat;
+                }
+            }
+        }
+
+        // Hapus seluruh baris tabel anak beserta induk tiket di dalam satu transaksi atomik
         $db = $this->tiket->dbAktif();
         $db->transStart();
         $proses = $this->tiket->hapus('d_history', ['ticketTrackingIdHistory' => $terbuka])
             && $this->tiket->hapus('d_replies', ['repliesTicketId' => $terbuka])
             && $this->tiket->hapus('d_archive', ['archiveTrackingId' => $terbuka])
             && $this->tiket->hapus('d_disposisi', ['disposisiTicketId' => $terbuka])
+            && $this->tiket->hapus('r_surat', ['suratTrackingId' => $terbuka])
+            && $this->tiket->hapus('d_rating', ['ratingTicketId' => $terbuka])
+            && $this->tiket->hapus('d_worker', ['workerTrackingId' => $terbuka])
             && $this->tiket->hapus('d_ticketing', ['ticketTrackingId' => $terbuka]);
         $db->transComplete();
 
-        if (! empty($proses)) {
+        if ($db->transStatus() && ! empty($proses)) {
+            // Hapus berkas fisik hanya setelah transaksi database dipastikan sukses
+            foreach (array_unique($daftarBerkasHapus) as $lokasiBerkas) {
+                if (is_file($lokasiBerkas)) {
+                    @unlink($lokasiBerkas);
+                }
+            }
             eult_message_kirim($this->judul . ' Berhasil Dihapus', 'success');
         }
 
@@ -1478,10 +1535,17 @@ class Ticketing extends BaseController
 
     public function loadpdf(string $namaFile = '')
     {
-        $namaFile = basename($namaFile);
-        $arsip    = $this->tiket->ambilSatu('d_archive', ['archiveFile' => $namaFile]);
+        // Dukung parameter berupa archiveId terenkripsi maupun nama berkas langsung
+        $idArsipTerbuka = $this->enkripsi->decode($namaFile);
+        if (is_string($idArsipTerbuka) && $idArsipTerbuka !== '') {
+            $arsip    = $this->tiket->ambilSatu('d_archive', ['archiveId' => $idArsipTerbuka]);
+            $namaFile = is_array($arsip) ? basename((string) ($arsip['archiveFile'] ?? '')) : '';
+        } else {
+            $namaFile = basename($namaFile);
+            $arsip    = $namaFile !== '' ? $this->tiket->ambilSatu('d_archive', ['archiveFile' => $namaFile]) : false;
+        }
 
-        if ($arsip === false || ! $this->bolehAksesTiket((string) $arsip['archiveTrackingId'])) {
+        if ($arsip === false || $namaFile === '' || ! $this->bolehAksesTiket((string) $arsip['archiveTrackingId'])) {
             return $this->response->setStatusCode(403)->setBody('Akses ditolak.');
         }
 
@@ -1499,7 +1563,18 @@ class Ticketing extends BaseController
 
     public function loadimage(string $kunci = '')
     {
-        $nama   = basename((string) $this->enkripsi->decode($kunci));
+        $terbuka = $this->enkripsi->decode($kunci);
+        if (! is_string($terbuka) || $terbuka === '') {
+            return $this->response->setStatusCode(404)->setBody('File tidak ditemukan.');
+        }
+
+        $nama    = basename($terbuka);
+        $idTiket = (string) preg_replace('/^(TTD_|OUTPUT_)/', '', $nama);
+
+        if (! $this->bolehAksesTiket($idTiket)) {
+            return $this->response->setStatusCode(403)->setBody('Akses ditolak.');
+        }
+
         $lokasi = WRITEPATH . 'uploads/qrcode/' . $nama . '.png';
 
         if ($nama === '' || ! is_file($lokasi)) {
@@ -1626,24 +1701,26 @@ class Ticketing extends BaseController
         $datas     = $this->tiket->getSurat(['ticketTrackingId' => $pecah[0]]);
         $identitas = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $pecah[0]]);
 
-        $mentah = $identitas !== false ? $this->osm->mhsId2((string) $identitas['ticketIdentitas']) : false;
-        $mahasiswa = $mentah ? (object) [
-            'nim'              => $mentah->nim ?? '',
-            'name'             => $mentah->peserta_didik->nama ?? '',
-            'ipk'              => $mentah->ipk ?? '',
-            'faculty_name'     => $mentah->program_studi->nama_fakultas ?? '',
-            'departement_name' => $mentah->program_studi->nama ?? '',
-            'degree'           => $mentah->program_studi->jenjang ?? '',
-        ] : false;
+        $mahasiswa = $identitas !== false
+            ? $this->normalisasiMahasiswa($this->osm->mhsId2((string) $identitas['ticketIdentitas']))
+            : false;
         $pegawai = $identitas !== false ? $this->osm->pegawaiId((string) $identitas['ticketIdentitas']) : false;
 
-        $arsipId = eult_auto_increment('d_archive', 'archiveId', str_replace('-', '', $pecah[0]), ['archiveTrackingId' => $pecah[0]]);
-        $this->tiket->tambah('d_archive', [
-            'archiveId'         => $arsipId,
+        // Cegah duplikasi baris d_archive apabila nama berkas yang sama dicetak ulang
+        $namaFilePdf = $pecah[1] . '.pdf';
+        $arsipAda    = $this->tiket->ambilSatu('d_archive', [
             'archiveTrackingId' => $pecah[0],
-            'archiveJenis'      => 'TTD',
-            'archiveFile'       => $pecah[1] . '.pdf',
+            'archiveFile'       => $namaFilePdf,
         ]);
+        if ($arsipAda === false) {
+            $arsipId = eult_auto_increment('d_archive', 'archiveId', str_replace('-', '', $pecah[0]), ['archiveTrackingId' => $pecah[0]]);
+            $this->tiket->tambah('d_archive', [
+                'archiveId'         => $arsipId,
+                'archiveTrackingId' => $pecah[0],
+                'archiveJenis'      => 'TTD',
+                'archiveFile'       => $namaFilePdf,
+            ]);
+        }
 
         // Template cetak_* mengakses $datas sebagai array.
         $form = $this->templateCetak(is_array($datas) ? ($datas['tsuratForm'] ?? null) : null);
@@ -1658,11 +1735,82 @@ class Ticketing extends BaseController
             $kaki        = str_replace('<li>', "<li style='font-size: 8pt;'>", $suratFooter !== '' ? $suratFooter : $kakiSurat);
         }
         $mpdf->SetHTMLFooter($kaki);
-        $mpdf->Output(WRITEPATH . 'uploads/ticketing/' . $pecah[1] . '.pdf', 'F');
+        $mpdf->Output(WRITEPATH . 'uploads/ticketing/' . $namaFilePdf, 'F');
     }
 
     public function saveSurat()
     {
         return $this->delivered();
+    }
+
+    /**
+     * Mengambil dokumen hasil akhir terbaru (baik OUTPUT maupun TTD) milik tiket.
+     *
+     * @return array<string, mixed>|false
+     */
+    private function ambilArsipOutputTerbaru(string $idTiket): array|false
+    {
+        if ($idTiket === '') {
+            return false;
+        }
+
+        $baris = $this->tiket->tabelBuilder('d_archive')
+            ->where('archiveTrackingId', $idTiket)
+            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
+            ->orderBy('archiveId', 'DESC')
+            ->get()
+            ->getRowArray();
+
+        return $baris ?? false;
+    }
+
+    /**
+     * Menolak perubahan status pada tiket yang sudah berstatus final (5 = Selesai, 8 = Ditolak).
+     */
+    private function pastikanTiketBelumFinal(string $idTiket): void
+    {
+        if ($idTiket === '') {
+            return;
+        }
+
+        $tiket = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $idTiket]);
+        if (is_array($tiket) && in_array((int) ($tiket['ticketStatus'] ?? 0), [5, 8], true)) {
+            eult_message_kirim('Tiket sudah berstatus final dan tidak dapat diubah lagi.', 'error');
+        }
+    }
+
+    /**
+     * Menormalisasi objek mahasiswa dari API SIA/OSM agar kompatibel baik untuk
+     * template yang mengakses properti flat maupun objek bersarang SIA baru.
+     */
+    private function normalisasiMahasiswa(mixed $mentah): object|false
+    {
+        if (! is_object($mentah)) {
+            return false;
+        }
+
+        $pesertaDidik = is_object($mentah->peserta_didik ?? null) ? $mentah->peserta_didik : (object) [];
+        $prodi        = is_object($mentah->program_studi ?? null) ? $mentah->program_studi : (object) [];
+        $registrasi   = is_object($mentah->registrasi_mahasiswa ?? null) ? $mentah->registrasi_mahasiswa : (object) [];
+        $jenjangObj   = is_object($prodi->jenjang_didik ?? null) ? $prodi->jenjang_didik : (object) [];
+
+        $ipkMentah = $mentah->ipk ?? ($registrasi->ipk ?? 0);
+
+        return (object) [
+            'nim'                  => (string) ($mentah->nim ?? ''),
+            'name'                 => (string) ($mentah->name ?? ($pesertaDidik->nama ?? '')),
+            'ipk'                  => is_numeric($ipkMentah) ? (float) $ipkMentah : 0.0,
+            'faculty_name'         => (string) ($mentah->faculty_name ?? ($prodi->nama_fakultas ?? '')),
+            'departement_name'     => (string) ($mentah->departement_name ?? ($prodi->nama_prodi ?? ($prodi->nama ?? ''))),
+            'degree'               => (string) ($mentah->degree ?? ($prodi->jenjang ?? ($jenjangObj->nama ?? ''))),
+            'hometown'             => (string) ($mentah->hometown ?? ($pesertaDidik->tempat_lahir ?? '')),
+            'transcript_hometown'  => (string) ($mentah->transcript_hometown ?? ($pesertaDidik->tempat_lahir ?? '')),
+            'birthdate'            => (string) ($mentah->birthdate ?? ($pesertaDidik->tanggal_lahir ?? '')),
+            'graduated_date'       => (string) ($mentah->graduated_date ?? ($registrasi->tanggal_keluar ?? '')),
+            'title'                => (string) ($mentah->title ?? ($prodi->gelar ?? '')),
+            'peserta_didik'        => $pesertaDidik,
+            'program_studi'        => $prodi,
+            'registrasi_mahasiswa' => $registrasi,
+        ];
     }
 }

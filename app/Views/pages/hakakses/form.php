@@ -13,20 +13,20 @@
                 <div class="kt-portlet__head">
                     <div class="kt-portlet__head-label">
                         <h3 class="kt-portlet__head-title">
-                            <?= strtoupper($page_judul) ?>
+                            <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                         </h3>
                     </div>
                 </div>
 
                 <!--begin::Form-->
-                <form class="kt-form" action="<?= $save_url ?>" method="post" id="form_form">
+                <form class="kt-form" action="<?= esc($save_url ?? '') ?>" method="post" id="form_form">
                     <?= csrf_field() ?>
                     <div class="kt-portlet__body">
-                        <input type="hidden" name="sgroupNamaOld" value="<?= $datas != false ? $datas['sgroupNama'] : '' ?>">
+                        <input type="hidden" name="sgroupNamaOld" value="<?= $datas != false ? esc((string) ($datas['sgroupNama'] ?? ''), 'attr') : '' ?>">
 
                         <div class="form-group">
                             <label>Hak Akses</label>
-                            <input type="text" class="form-control" name="sgroupNama" placeholder="Hak Akses" aria-describedby="Hak Akses" value="<?= $datas != false ? $datas['sgroupNama'] : '' ?>">
+                            <input type="text" class="form-control" name="sgroupNama" placeholder="Hak Akses" aria-describedby="Hak Akses" value="<?= $datas != false ? esc((string) ($datas['sgroupNama'] ?? ''), 'attr') : '' ?>">
                         </div>
                         <div class="form-group">
                             <label>Hak Layanan</label>
@@ -35,15 +35,16 @@
                                 <option value=""></option>
                                 <option value="99">Semua Layanan</option>
                                 <?php
-                                foreach ($r_category as $row) :
-                                    echo '<option value="' . $row['unitId'] . '" ' . ($datas != false ? $datas['sgroupCategoryId'] == $row['unitId'] ? 'selected' : '' : '') . '>' . $row['unitNama'] . '</option>';
+                                foreach (($r_category ?: []) as $row) :
+                                    $terpilihUnit = ($datas != false && (string) ($datas['sgroupCategoryId'] ?? '') === (string) ($row['unitId'] ?? '')) ? 'selected' : '';
+                                    echo '<option value="' . esc((string) ($row['unitId'] ?? ''), 'attr') . '" ' . $terpilihUnit . '>' . esc((string) ($row['unitNama'] ?? '')) . '</option>';
                                 endforeach;
                                 ?>
                             </select>
                         </div>
                         <div class="form-group">
                             <label>Keterangan</label>
-                            <input type="text" class="form-control" name="sgroupKeterangan" placeholder="Keterangan" aria-describedby="Keterangan" value="<?= $datas != false ? $datas['sgroupKeterangan'] : '' ?>">
+                            <input type="text" class="form-control" name="sgroupKeterangan" placeholder="Keterangan" aria-describedby="Keterangan" value="<?= $datas != false ? esc((string) ($datas['sgroupKeterangan'] ?? ''), 'attr') : '' ?>">
                         </div>
 
                     </div>

@@ -124,34 +124,44 @@
 		<div class="mb-20"></div>
 		<div class="sub-title"><p>Kepada Yth.<br />Pimpinan Kantor Cabang Pembantu<br /><?=$bank?> Kampus Unmul Gunung Kelua<br />d/a. Jalan Kuaro<br />di -<br />&nbsp; &nbsp; &nbsp; &nbsp;Samarinda</p></div>
 		<div class="mb-20"></div>
+		<?php
+		// Ekstraksi aman atribut mahasiswa untuk mencegah error saat data OSM gagal/kosong
+		$isObjMhs       = is_object($mahasiswa ?? false);
+		$namaMhs        = $isObjMhs ? (string) ($mahasiswa->peserta_didik->nama ?? ($mahasiswa->name ?? '')) : '';
+		$nimMhs         = $isObjMhs ? (string) ($mahasiswa->nim ?? '') : '';
+		$tempatLahirMhs = $isObjMhs ? (string) ($mahasiswa->peserta_didik->tempat_lahir ?? ($mahasiswa->hometown ?? '')) : '';
+		$tglLahirMhs    = $isObjMhs ? (string) ($mahasiswa->peserta_didik->tanggal_lahir ?? ($mahasiswa->birthdate ?? '')) : '';
+		$fakultasMhs    = $isObjMhs ? (string) ($mahasiswa->program_studi->nama_fakultas ?? ($mahasiswa->faculty_name ?? '')) : '';
+		$prodiMhs       = $isObjMhs ? (string) ($mahasiswa->program_studi->nama ?? ($mahasiswa->program_studi->nama_prodi ?? ($mahasiswa->departement_name ?? ''))) : '';
+		?>
 		<div class="paragraf">
-			<p>Menindaklanjuti Surat Keterangan dari Wakil Dekan Bidang Akademik, Kemahasiswaan dan Alumni Fakultas <?=ucwords(strtolower($mahasiswa->program_studi->nama_fakultas))?> Universitas Mulawarman Nomor <?=$noSuratPemohon?> tanggal <?=datetoindo($tglSuratPemohon)?>, yang menerangkan bahwa telah hilang E-KTM Sdr :</p>			
+			<p>Menindaklanjuti Surat Keterangan dari Wakil Dekan Bidang Akademik, Kemahasiswaan dan Alumni Fakultas <?= $fakultasMhs !== '' ? ucwords(strtolower($fakultasMhs)) : '-' ?> Universitas Mulawarman Nomor <?=$noSuratPemohon?> tanggal <?= $tglSuratPemohon !== '' ? datetoindo($tglSuratPemohon) : '' ?>, yang menerangkan bahwa telah hilang E-KTM Sdr :</p>			
 			<div class="elem-center ">
 				<table class="paragraf">
 					<tr>
 						<td style="width:4.5cm">Nama</td>
 						<td style="width:10px">:</td>
-						<td class="bold uppercase"><?= $mahasiswa != false ? $mahasiswa->peserta_didik->nama : '' ?></td>
+						<td class="bold uppercase"><?= $namaMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">NIM</td>
 						<td style="width:10px">:</td>
-						<td><?= $mahasiswa != false ? $mahasiswa->nim : '' ?></td>
+						<td><?= $nimMhs ?></td>
 					</tr>
                     <tr>
 						<td style="width:4.5cm">Tempat/Tanggal Lahir</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa->peserta_didik->tempat_lahir != '' ? $mahasiswa->peserta_didik->tempat_lahir.', ' : '' ?><?= $mahasiswa->peserta_didik->tanggal_lahir != '' ? datetoindo(substr($mahasiswa->peserta_didik->tanggal_lahir, 0,10)) : '' ?> </td>
+						<td class="capitalize"><?= $tempatLahirMhs !== '' ? $tempatLahirMhs . ', ' : '' ?><?= $tglLahirMhs !== '' ? datetoindo(substr($tglLahirMhs, 0, 10)) : '' ?> </td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Fakultas</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->program_studi->nama_fakultas : '' ?></td>
+						<td class="capitalize"><?= $fakultasMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Program Studi</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->program_studi->nama : '' ?></td>
+						<td class="capitalize"><?= $prodiMhs ?></td>
 					</tr>
 				</table>
 			</div>

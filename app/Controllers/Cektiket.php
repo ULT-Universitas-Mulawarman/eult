@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Libraries\Enkripsi;
+use App\Libraries\GeneratorQr;
 use App\Libraries\PengirimEmail;
 use App\Models\ModelTicketing;
 use Mpdf\Mpdf;
@@ -59,7 +60,7 @@ class Cektiket extends BaseController
 
         $balasan = $this->tiket->getReplies('d_replies', ['repliesTicketId' => $nomorTiket]);
         $riwayat = $this->tiket->getHistory((string) $nomorTiket);
-        $output  = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $nomorTiket, 'archiveJenis' => 'OUTPUT']);
+        $output  = $this->ambilArsipOutputTerbaru((string) $nomorTiket);
 
         return view('pages/ticketing/detail_user', [
             'page_judul'  => 'Cek Tiket',
@@ -99,6 +100,10 @@ class Cektiket extends BaseController
         }
 
         if (! $this->validate(['repliesMessage' => 'required'])) {
+            // Alihkan kembali ke halaman detail tiket apabila form HTML dikirim langsung oleh peramban
+            if (! $this->isAjax() && str_contains($this->request->getHeaderLine('Accept'), 'text/html')) {
+                return redirect()->to(base_url('cektiket/index/' . $kunci))->with('error', 'Pesan balasan wajib diisi.');
+            }
             eult_message_kirim('Ooops!! Something Wrong!!', 'error');
         }
 
@@ -143,6 +148,11 @@ class Cektiket extends BaseController
             eult_message_kirim('Kunci tidak valid.', 'error');
         }
 
+        // Pastikan penilaian IKM hanya dapat diisi untuk tiket yang telah selesai (status 5)
+        if ($datas['ticketStatus'] !== null && (int) $datas['ticketStatus'] !== 5) {
+            eult_message_kirim('Penilaian hanya dapat diberikan setelah layanan selesai.', 'error');
+        }
+
         $rating = $this->request->getPost('rating');
 
         if (! is_numeric($rating) || (float) $rating < 1 || (float) $rating > 5) {
@@ -162,9 +172,10 @@ class Cektiket extends BaseController
             $param['ratingKeterangan'] = $keterangan;
         }
 
-        $cek = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => $nomorTiket]);
+        $cek        = $this->tiket->ambilSatu('d_rating', ['ratingTicketId' => $nomorTiket]);
+        $ratingBaru = empty($cek);
 
-        $proses = empty($cek)
+        $proses = $ratingBaru
             ? $this->tiket->tambah('d_rating', $param)
             : $this->tiket->ubah('d_rating', $param, ['ratingTicketId' => $nomorTiket]);
 
@@ -172,10 +183,13 @@ class Cektiket extends BaseController
             eult_message_kirim('Gagal menyimpan penilaian, ' . $this->tiket->pesanGalat('simpan rating'), 'error');
         }
 
-        $output = $this->tiket->tabelBuilder('d_archive')
-            ->where('archiveTrackingId', $nomorTiket)
-            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
-            ->get()->getRowArray() ?? false;
+        // Cegah pengiriman ulang email berkas pada pembaruan rating berikutnya (anti-mail bombing)
+        if (! $ratingBaru) {
+            $this->response->setHeader(csrf_header(), csrf_hash());
+            eult_message_kirim('Penilaian Anda berhasil diperbarui.', 'success');
+        }
+
+        $output   = $this->ambilArsipOutputTerbaru((string) $nomorTiket);
         $lampiran = $output !== false ? $output['archiveFile'] : false;
 
         $terkirim = false;
@@ -204,6 +218,13 @@ class Cektiket extends BaseController
             return $this->response->setStatusCode(404)->setBody('Tiket tidak ditemukan.');
         }
 
+        // Bangkitkan gambar QR tanda terima otomatis bila belum tersedia di disk
+        $lokasiQr = WRITEPATH . 'uploads/qrcode/' . basename((string) $id) . '.png';
+        if (! is_file($lokasiQr)) {
+            $qr = new GeneratorQr();
+            $qr->generate((string) site_url('cektiket/index/' . $kunci), basename((string) $id));
+        }
+
         $mpdf = new Mpdf();
         $mpdf->WriteHTML(view('pages/ticketing/cetak/tanda_terima', [
             'datas'        => $datas,
@@ -224,9 +245,9 @@ class Cektiket extends BaseController
     public function loadpdf(string $kunci = '')
     {
         $nomorTiket = $this->enkripsi->decode($kunci);
-        $arsip      = $nomorTiket === false
+        $arsip      = (! is_string($nomorTiket) || $nomorTiket === '')
             ? false
-            : $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $nomorTiket, 'archiveJenis' => 'OUTPUT']);
+            : $this->ambilArsipOutputTerbaru($nomorTiket);
 
         if ($arsip === false) {
             return $this->response->setStatusCode(404)->setBody('File tidak ditemukan.');
@@ -271,5 +292,26 @@ class Cektiket extends BaseController
         return $this->response
             ->setHeader('Content-Type', $mime)
             ->setBody(file_get_contents($lokasi));
+    }
+
+    /**
+     * Mengambil dokumen hasil akhir terbaru (baik OUTPUT maupun TTD) milik tiket.
+     *
+     * @return array<string, mixed>|false
+     */
+    private function ambilArsipOutputTerbaru(string $nomorTiket): array|false
+    {
+        if ($nomorTiket === '') {
+            return false;
+        }
+
+        $baris = $this->tiket->tabelBuilder('d_archive')
+            ->where('archiveTrackingId', $nomorTiket)
+            ->whereIn('archiveJenis', ['OUTPUT', 'TTD'])
+            ->orderBy('archiveId', 'DESC')
+            ->get()
+            ->getRowArray();
+
+        return $baris ?? false;
     }
 }

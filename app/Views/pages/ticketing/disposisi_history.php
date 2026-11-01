@@ -29,10 +29,10 @@
                                     </div>
                                 </div>
                                 <span class="kt-notes__body">
-                                    <?= $datas['ticketIdentitas'] . ' - ' . $datas['ticketName'] . ' (' . $datas['ticketNoHp'] . ' / ' . $datas['ticketEmail'] . ')' ?> <br />
-                                    <?= $datas['sCatNama'] . ' - ' . $datas['categoryNama'] ?> <br />
-                                    <?= '<strong>'.$datas['ticketSubject'] . ' - ' . $datas['ticketMessage'].'</strong>' ?> <br />
-                                    <?= ($archive_first_url != false) ? '<a href="' . $archive_first_url . '" >Lampiran</a>' : '' ?> <br />
+                                    <?= esc($datas['ticketIdentitas'] ?? '') . ' - ' . esc($datas['ticketName'] ?? '') . ' (' . esc($datas['ticketNoHp'] ?? '') . ' / ' . esc($datas['ticketEmail'] ?? '') . ')' ?> <br />
+                                    <?= esc($datas['sCatNama'] ?? '') . ' - ' . esc($datas['categoryNama'] ?? '') ?> <br />
+                                    <strong><?= esc($datas['ticketSubject'] ?? '') . ' - ' . esc($datas['ticketMessage'] ?? '') ?></strong> <br />
+                                    <?= ($archive_first_url != false) ? '<a href="' . esc($archive_first_url) . '" >Lampiran</a>' : '' ?> <br />
                                 </span>
                             </div>
                         </div>
@@ -53,10 +53,10 @@
                                         </div>
                                     </div>
                                     <span class="kt-notes__body">
-                                        <?= 'Disposisi oleh ' . $row['disposisiUser'] . ' - ' . $row['disposisiUserProfil'] . ' (' . $row['dunitNama'] . ')' ?> <br />
-                                        <?= '<strong>Pesan Disposisi: ' . $row['disposisiMessage'].'</strong>' ?> <br />
-                                        <?= 'Status: ' . $row['statusNama'] . ' - ' . $row['priorityName'] ?> <br />
-                                        <?= !empty($row['archiveId']) ? '<a href="' . $loadpdf . $row['archiveFile'] . '" >Lampiran</a>' : '' ?> <br />
+                                        <?= 'Disposisi oleh ' . esc($row['disposisiUser'] ?? '') . ' - ' . esc($row['disposisiUserProfil'] ?? '') . ' (' . esc($row['dunitNama'] ?? '') . ')' ?> <br />
+                                        <strong>Pesan Disposisi: <?= esc($row['disposisiMessage'] ?? '') ?></strong> <br />
+                                        <?= 'Status: ' . esc($row['statusNama'] ?? '') . ' - ' . esc($row['priorityName'] ?? '') ?> <br />
+                                        <?= !empty($row['archiveId']) ? '<a href="' . esc($loadpdf . service('enkripsi')->encode((string) $row['archiveId'])) . '" >Lampiran</a>' : '' ?> <br />
                                     </span>
                                 </div>
                             </div>

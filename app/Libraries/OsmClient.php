@@ -22,11 +22,17 @@ class OsmClient
 
     private CURLRequest $http;
 
+    private bool $verifikasiSsl;
+
     public function __construct(?CURLRequest $http = null)
     {
         $bacaEnv = static fn (string $kunci, string $bawaan = ''): string => function_exists('env') && env($kunci) !== null && env($kunci) !== '' ? (string) env($kunci) : $bawaan;
 
         $this->dasar = rtrim($bacaEnv('EULT_OSM_URL', 'https://osm.unmul.ac.id'), '/');
+
+        // Aktifkan verifikasi sertifikat SSL secara eksplisit (default: true) untuk mencegah serangan MitM
+        $envSsl              = strtolower(trim($bacaEnv('EULT_OSM_VERIFY_SSL', 'true')));
+        $this->verifikasiSsl = ! in_array($envSsl, ['false', '0', 'no', 'off'], true);
 
         $this->kredensial = [
             'plpkkn' => [
@@ -49,8 +55,17 @@ class OsmClient
         $this->http = $http ?? Services::curlrequest([
             'timeout'     => 30,
             'http_errors' => false,
+            'verify'      => $this->verifikasiSsl,
             'headers'     => ['User-Agent' => 'eult/unmul'],
-        ]);
+        ], null, null, false);
+    }
+
+    /**
+     * Memeriksa apakah verifikasi sertifikat SSL pada klien HTTP OSM aktif.
+     */
+    public function apakahVerifikasiSslAktif(): bool
+    {
+        return $this->verifikasiSsl;
     }
 
     private function gabungParam(string $pemisah, array $array, string $simbol = '='): string

@@ -69,6 +69,10 @@ class Throttle extends BaseConfig
             'limit'  => 20,
             'window' => 60,
         ],
+        'cektiket/rating' => [
+            'limit'  => 5,
+            'window' => 60,
+        ],
     ];
 
     /**

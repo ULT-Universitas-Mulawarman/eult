@@ -128,13 +128,19 @@
 			<?= $datas != FALSE ? (!empty($datas['suratBody']) ? $datas['suratBody'] : $isiSurat) : '' ?>
 			<?php if (!empty($datas['ticketValidated'])) : ?>
 				<div style="margin-left: 8cm">
-					<p style="margin-bottom: 0px">a.n Rektor <br> <?= $datas['suratPejabatJabatan'] ?></p>
+					<p style="margin-bottom: 0px">a.n Rektor <br> <?= $datas['suratPejabatJabatan'] ?? '' ?></p>
 					<?php
-					if (file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $datas['ticketTrackingId'] . '.png')) :
+					if (!empty($datas['ticketTrackingId']) && file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $datas['ticketTrackingId'] . '.png')) :
 						?>
 						<img width="100" src="<?= WRITEPATH ?>uploads/qrcode/TTD_<?= $datas['ticketTrackingId'] ?>.png" alt="">
 					<?php endif; ?>
-					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNama'] ?> </span><br> NIP. <?= $datas['suratPejabatNIP'] ?></p>
+					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNama'] ?? '' ?> </span><br> NIP. <?= $datas['suratPejabatNIP'] ?? '' ?></p>
+				</div>
+			<?php elseif ($datas != FALSE) : ?>
+				<div style="margin-left: 8cm">
+					<p style="margin-bottom: 0px"><?= empty($datas['suratPejabatJabatanAnDraft']) ? 'a.n Rektor' : 'a.n ' . $datas['suratPejabatJabatanAnDraft'] ?> <br> <?= $datas['suratPejabatJabatanDraft'] ?? '' ?></p>
+					<br><br><br><br>
+					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNamaDraft'] ?? '' ?> </span><br> NIP. <?= $datas['suratPejabatNIPDraft'] ?? '' ?></p>
 				</div>
 			<?php endif ?>
 		</div>

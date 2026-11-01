@@ -33,6 +33,19 @@ var Dashboard = function() {
                 button.prop( "disabled", false );
                 button.removeClass('disabled');
                 button.text(button_text);  
+            },
+            error: function() {
+                // Pulihkan tombol simpan saat terjadi galat jaringan atau HTTP 4xx/5xx
+                button.prop("disabled", false);
+                button.removeClass('disabled');
+                button.text(button_text);
+                swal.fire({
+                    position: "top-right",
+                    type: "error",
+                    title: "Terjadi kesalahan jaringan atau server. Silakan coba lagi.",
+                    showConfirmButton: !1,
+                    timer: 2000
+                });
             }
         })
     }

@@ -57,7 +57,7 @@
                                                     <td class="text-center align-middle">
                                                         <div class="d-inline-flex align-items-center justify-content-center">
                                                             <span class="kt-badge kt-badge--unified-brand kt-badge--lg kt-badge--rounded mr-2" style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;">
-                                                                <?= $row['susrmdgroupIcon'] ?>
+                                                                <?= eult_ikon_aman($row['susrmdgroupIcon'] ?? '') ?>
                                                             </span>
                                                             <code class="text-muted small py-1 px-2 bg-light border rounded" style="font-family: monospace; font-size: 11px;"><?= esc($row['susrmdgroupIcon']) ?></code>
                                                         </div>

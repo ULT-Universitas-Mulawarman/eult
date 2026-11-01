@@ -83,18 +83,18 @@
 								endif;
 				?>
 				<li class="kt-menu__item  kt-menu__item--submenu <?= $row['susrmdgroupDisplay']==$susrmdgroupDisplay ? 'kt-menu__item--open kt-menu__item--expanded' : '' ?>" aria-haspopup="true" data-ktmenu-submenu-toggle="hover"><a href="javascript:;" class="kt-menu__link kt-menu__toggle"><span class="kt-menu__link-icon">
-						<?= $row['susrmdgroupIcon'] ?>
-					</span><span class="kt-menu__link-text"><?= $row['susrmdgroupDisplay'] ?></span><i class="kt-menu__ver-arrow la la-angle-right"></i></a>
+						<?= eult_ikon_aman($row['susrmdgroupIcon'] ?? '') ?>
+					</span><span class="kt-menu__link-text"><?= esc($row['susrmdgroupDisplay'] ?? '') ?></span><i class="kt-menu__ver-arrow la la-angle-right"></i></a>
 					<div class="kt-menu__submenu "><span class="kt-menu__arrow"></span>
 						<ul class="kt-menu__subnav">
-							<li class="kt-menu__item  kt-menu__item--parent" aria-haspopup="true"><span class="kt-menu__link"><span class="kt-menu__link-text"><?= $row['susrmdgroupDisplay'] ?></span></span></li>
+							<li class="kt-menu__item  kt-menu__item--parent" aria-haspopup="true"><span class="kt-menu__link"><span class="kt-menu__link-text"><?= esc($row['susrmdgroupDisplay'] ?? '') ?></span></span></li>
 				<?php
 							endif;
 				?>
 							<li class="kt-menu__item <?= $row['susrmodulNamaDisplay']==$susrmodulNamaDisplay ? 'kt-menu__item--active' : '' ?>" aria-haspopup="true">
-								<a href="<?= base_url($row['susrmodulNama']) ?>" class="kt-menu__link ">
+								<a href="<?= esc(base_url((string) ($row['susrmodulNama'] ?? ''))) ?>" class="kt-menu__link ">
 									<i class="kt-menu__link-bullet kt-menu__link-bullet--dot"><span></span></i>
-									<span class="kt-menu__link-text"><?= $row['susrmodulNamaDisplay'] ?></span>
+									<span class="kt-menu__link-text"><?= esc($row['susrmodulNamaDisplay'] ?? '') ?></span>
 								</a>
 							</li>
 				<?php

@@ -136,42 +136,26 @@
                 height: auto !important;
             }
 
-        }
-    </style>
-    <style {csp-style-nonce}>
-        body {
-            background-color: #EAECED
-        }
-    </style>
-    <style {csp-style-nonce}>
-        @media only screen and (max-width: 600px) {
-
             img[class="header-image"] {
-
                 width: 100% !important;
                 height: auto !important;
                 max-width: 680px;
-
             }
 
-        }
-    </style>
-    <style {csp-style-nonce}>
-        @media only screen and (max-width: 600px) {
-
             img[class="logo"] {
-
                 width: 100% !important;
                 height: auto !important;
                 max-width: 50px;
-
             }
 
         }
+
+        body {
+            background-color: #EAECED;
+        }
     </style>
-    <title>ULT - Universitas Mulawarman: Nomor Tiket <?= $datas != false ? $datas['ticketTrackingId'] : '' ?></title>
+    <title>ULT - Universitas Mulawarman: Nomor Tiket <?= $datas != false ? esc($datas['ticketTrackingId'] ?? '') : '' ?></title>
     <meta name="robots" content="noindex, nofollow">
-    <style type="text/css" {csp-style-nonce}></style>
 </head>
 
 <body style="padding:0; margin:0; width:100% !important; background-color:#EAECED" bgcolor="#EAECED">
@@ -213,16 +197,16 @@
                                                 <td align="center" style="font-family: Open sans, Arial, Helvetica, sans-serif; color: #4A4A4A; font-size: 16px; line-height: 22px; text-align: left;" class="bodyText" id="content-6">
                                                     <div class="text">
                                                         <div style="margin-top: 0px; margin-bottom: 10px; text-align: left;">
-                                                            <p>Halo <?= $datas != false ? $datas['ticketName'] : '' ?>,</p>
+                                                            <p>Halo <?= $datas != false ? esc($datas['ticketName'] ?? '') : '' ?>,</p>
                                                             <p>Permintaan layanan telah kami selesai kami proses, dengan detil layanan sebagai berikut :</p>
                                                             <div style="padding-left:20px; padding-top:10px;padding-bottom:10px; padding-right:10px;background-color:#EAECED;margin-bottom:30px;border-radius:4px;line-height: 160%;">
-                                                                Nomor Tiket: <b><?= $datas != false ? $datas['ticketTrackingId'] : '' ?></b><br>
-                                                                Layanan: <b><?= $datas != false ? $datas['sCatNama'] : '' ?></b><br>
-                                                                Jenis Layanan: <b><?= $datas != false ? $datas['categoryNama'] : '' ?></b><br>
-                                                                Prioritas: <b><?= $datas != false ? $datas['priorityName'] : '' ?></b><br>
-                                                                Status: <b><?= $datas != false ? $datas['statusNama'] : '' ?></b><br>
+                                                                Nomor Tiket: <b><?= $datas != false ? esc($datas['ticketTrackingId'] ?? '') : '' ?></b><br>
+                                                                Layanan: <b><?= $datas != false ? esc($datas['sCatNama'] ?? '') : '' ?></b><br>
+                                                                Jenis Layanan: <b><?= $datas != false ? esc($datas['categoryNama'] ?? '') : '' ?></b><br>
+                                                                Prioritas: <b><?= $datas != false ? esc($datas['priorityName'] ?? '') : '' ?></b><br>
+                                                                Status: <b><?= $datas != false ? esc($datas['statusNama'] ?? '') : '' ?></b><br>
                                                             </div>
-                                                            <p>Terima kasih <?= $datas != false ? $datas['ticketName'] : '' ?> telah menggunakan EULT Universitas Mulawarman.</p>
+                                                            <p>Terima kasih <?= $datas != false ? esc($datas['ticketName'] ?? '') : '' ?> telah menggunakan EULT Universitas Mulawarman.</p>
                                                         </div>
                                                     </div>
                                                 </td>

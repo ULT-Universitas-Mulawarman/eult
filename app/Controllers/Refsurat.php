@@ -59,7 +59,9 @@ class Refsurat extends BaseController
         $data['scripts']     = [];
         $data['save_url']    = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Update';
-        $data['datas']       = $this->surat->ambilSatu('r_category', ['categoryId' => $terbuka]);
+        $data['datas']       = (is_string($terbuka) && $terbuka !== '')
+            ? $this->surat->ambilSatu('r_category', ['categoryId' => $terbuka])
+            : false;
 
         return view($this->template, $data);
     }
@@ -85,6 +87,12 @@ class Refsurat extends BaseController
     {
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
+
+        // Tolak kunci rusak/kosong sebelum menyentuh query DELETE
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci referensi surat tidak valid.', 'error');
+        }
+
         $proses  = $this->surat->hapus('r_category', ['categoryId' => $terbuka]);
 
         if (! empty($proses)) {

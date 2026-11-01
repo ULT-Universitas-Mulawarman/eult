@@ -85,7 +85,18 @@
 			<p class="underline bold m-0 title"><?=$datas!=FALSE?$datas['suratJenis']:(session('sess_surat')['suratJenis'] ?? '')?></p>
 			<span class="sub-title">NOMOR: <?=$datas!=FALSE?$datas['suratNomor']:''?></span>
 		</div>
+		<?php
+		$idTiketQr = is_array($datas ?? false) ? (string) ($datas['ticketTrackingId'] ?? '') : '';
+		?>
 		<?php if ($identitas == 'MHS'){ ?>
+			<?php
+			$isObjMhs    = is_object($mahasiswa ?? false);
+			$namaMhs     = $isObjMhs ? (string) ($mahasiswa->name ?? ($mahasiswa->peserta_didik->nama ?? '')) : '';
+			$nimMhs      = $isObjMhs ? (string) ($mahasiswa->nim ?? '') : '';
+			$fakultasMhs = $isObjMhs ? (string) ($mahasiswa->faculty_name ?? ($mahasiswa->program_studi->nama_fakultas ?? '')) : '';
+			$prodiMhs    = $isObjMhs ? (string) ($mahasiswa->departement_name ?? ($mahasiswa->program_studi->nama_prodi ?? ($mahasiswa->program_studi->nama ?? ''))) : '';
+			$jenjangMhs  = $isObjMhs ? (string) ($mahasiswa->degree ?? ($mahasiswa->program_studi->jenjang ?? ($mahasiswa->program_studi->jenjang_didik->nama ?? ''))) : '';
+			?>
 			<div class="paragraf">
 				<p>Rektor Universitas Mulawarman, dengan ini menerangkan bahwa :</p>
 				<div class="elem-center ">
@@ -93,27 +104,27 @@
 						<tr>
 							<td style="width:4.5cm">Nama</td>
 							<td style="width:10px">:</td>
-							<td class="bold uppercase"><?=$datas!=FALSE?$mahasiswa->name:''?></td>
+							<td class="bold uppercase"><?= $datas != FALSE ? $namaMhs : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:4.5cm">NIM</td>
 							<td style="width:10px">:</td>
-							<td ><?=$datas!=FALSE?$mahasiswa->nim:''?></td>
+							<td ><?= $datas != FALSE ? $nimMhs : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:4.5cm">Fakultas</td>
 							<td style="width:10px">:</td>
-							<td class="capitalize"><?=$datas!=FALSE?$mahasiswa->faculty_name:''?></td>
+							<td class="capitalize"><?= $datas != FALSE ? $fakultasMhs : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:4.5cm">Program Studi</td>
 							<td style="width:10px">:</td>
-							<td class="capitalize"><?=$datas!=FALSE?$mahasiswa->departement_name:''?></td>
+							<td class="capitalize"><?= $datas != FALSE ? $prodiMhs : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:4.5cm">Jenjang Studi</td>
 							<td style="width:10px">:</td>
-							<td class="capitalize"><?=$datas!=FALSE?$mahasiswa->degree:''?></td>
+							<td class="capitalize"><?= $datas != FALSE ? $jenjangMhs : '' ?></td>
 						</tr>
 					</table>
 				</div>
@@ -123,19 +134,29 @@
 				<?php if (!empty($datas['ticketValidated'])){ ?>
 					<div style="margin-left: 8cm">
 						<p>Samarinda, <?=empty($datas['ticketSuratCreated'])?'':datetoindo($datas['ticketSuratCreated'])?></p>
-						<p>a.n Rektor <br> <?=$datas['suratPejabatJabatan']?></p>
-						<img width="100" src="<?= WRITEPATH ?>uploads/qrcode/BAZK-HGRY-001.png" alt="">
-						<p><span class="bold"><?=$datas['suratPejabatNama']?> </span><br> NIP. <?=$datas['suratPejabatNIP']?></p>
+						<p>a.n Rektor <br> <?=$datas['suratPejabatJabatan'] ?? ''?></p>
+						<?php if ($idTiketQr !== '' && file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $idTiketQr . '.png')) : ?>
+							<img width="100" src="<?= WRITEPATH ?>uploads/qrcode/TTD_<?= $idTiketQr ?>.png" alt="">
+						<?php endif; ?>
+						<p><span class="bold"><?=$datas['suratPejabatNama'] ?? ''?> </span><br> NIP. <?=$datas['suratPejabatNIP'] ?? ''?></p>
 					</div>	
 				<?php }else { ?>
 					<div style="margin-left: 8cm">
 					<p>Samarinda, <?= empty($datas['suratTanggal']) ? '' : datetoindo($datas['suratTanggal']) ?></p>
-					<p style="margin-bottom: 0px"><?= empty($datas['suratPejabatJabatanAnDraft']) ? '' : $datas['suratPejabatJabatanAnDraft'] ?> <br> <?= $datas['suratPejabatJabatanDraft'] ?></p>					
-					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNamaDraft'] ?> </span><br> NIP. <?= $datas['suratPejabatNIPDraft'] ?></p>
+					<p style="margin-bottom: 0px"><?= empty($datas['suratPejabatJabatanAnDraft']) ? '' : $datas['suratPejabatJabatanAnDraft'] ?> <br> <?= $datas['suratPejabatJabatanDraft'] ?? '' ?></p>					
+					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNamaDraft'] ?? '' ?> </span><br> NIP. <?= $datas['suratPejabatNIPDraft'] ?? '' ?></p>
 				</div>
 				<?php }?>		
 			</div>
 		<?php }else{ ?>
+			<?php
+			$sumberPeg = $pegawai ?? ($mahasiswa ?? false);
+			$pegNama   = is_array($sumberPeg) ? (string) ($sumberPeg['pegmNama'] ?? '') : (is_object($sumberPeg) ? (string) ($sumberPeg->pegmNama ?? '') : '');
+			$pegNip    = is_array($sumberPeg) ? (string) ($sumberPeg['pegmNIP'] ?? '') : (is_object($sumberPeg) ? (string) ($sumberPeg->pegmNIP ?? '') : '');
+			$pegGol    = is_array($sumberPeg) ? (string) ($sumberPeg['golNama'] ?? '') : (is_object($sumberPeg) ? (string) ($sumberPeg->golNama ?? '') : '');
+			$pegJab    = is_array($sumberPeg) ? (string) ($sumberPeg['jabNama'] ?? '') : (is_object($sumberPeg) ? (string) ($sumberPeg->jabNama ?? '') : '');
+			$pegUnit   = is_array($sumberPeg) ? (string) ($sumberPeg['unitNama'] ?? '') : (is_object($sumberPeg) ? (string) ($sumberPeg->unitNama ?? '') : '');
+			?>
 			<div class="paragraf">
 				<p>Yang bertanda tangan di bawah ini Rektor Universitas Mulawarman memberikan izin kepada Pegawai Negeri Sipil :</p>
 				<div class="elem-center ">
@@ -143,27 +164,27 @@
 						<tr>
 							<td style="width:5.5cm">Nama</td>
 							<td style="width:10px">:</td>
-							<td class="bold uppercase"><?=$datas!=FALSE?$mahasiswa->pegmNama:''?></td>
+							<td class="bold uppercase"><?= $datas != FALSE ? $pegNama : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:5.5cm">NIP</td>
 							<td style="width:10px">:</td>
-							<td ><?=$datas!=FALSE?$mahasiswa->pegmNIP:''?></td>
+							<td ><?= $datas != FALSE ? $pegNip : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:5.5cm">Pangkat / Golongan, Ruang</td>
 							<td style="width:10px">:</td>
-							<td><?=$datas!=FALSE?$mahasiswa->golNama:''?></td>
+							<td><?= $datas != FALSE ? $pegGol : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:5.5cm">Jabatan / Pekerjaan</td>
 							<td style="width:10px">:</td>
-							<td><?=$datas!=FALSE?$mahasiswa->jabNama:''?></td>
+							<td><?= $datas != FALSE ? $pegJab : '' ?></td>
 						</tr>
 						<tr>
 							<td style="width:5.5cm">Unit Kerja</td>
 							<td style="width:10px">:</td>
-							<td><?=$datas!=FALSE?$mahasiswa->unitNama:''?></td>
+							<td><?= $datas != FALSE ? $pegUnit : '' ?></td>
 						</tr>
 					</table>
 				</div>
@@ -173,9 +194,11 @@
 				<?php if (!empty($datas['ticketValidated'])): ?>
 					<div style="margin-left: 9cm">
 						<p>Samarinda, <?=empty($datas['ticketSuratCreated'])?'':datetoindo($datas['ticketSuratCreated'])?></p>
-						<p>a.n Rektor <br> <?=$datas['suratPejabatJabatan']?></p>
-						<!-- <img width="100" src="<?=$load_image?>" alt=""> -->
-						<p><span class="bold"><?=$datas['suratPejabatNama']?> </span><br> NIP. <?=$datas['suratPejabatNIP']?></p>
+						<p>a.n Rektor <br> <?=$datas['suratPejabatJabatan'] ?? ''?></p>
+						<?php if ($idTiketQr !== '' && file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $idTiketQr . '.png')) : ?>
+							<img width="100" src="<?= WRITEPATH ?>uploads/qrcode/TTD_<?= $idTiketQr ?>.png" alt="">
+						<?php endif; ?>
+						<p><span class="bold"><?=$datas['suratPejabatNama'] ?? ''?> </span><br> NIP. <?=$datas['suratPejabatNIP'] ?? ''?></p>
 					</div>	
 				<?php endif ?>		
 			</div>

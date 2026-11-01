@@ -20,26 +20,35 @@ if (! function_exists('eult_tombol_aksi')) {
         $susrSgroupNama = is_array($sesi) ? ($sesi['susrSgroupNama'] ?? '') : ($param['user_group'] ?? '');
         $noSurat        = '';
 
-        try {
-            $tiket     = new \App\Models\ModelTicketing();
-            $enkripsi  = new \App\Libraries\Enkripsi();
-            $idSurat   = $enkripsi->decode($param['key']);
-            $dataSurat = $tiket->ambilSatu('r_surat', ['suratTrackingId' => (string) $idSurat]);
-            $noSurat   = $dataSurat !== false && $dataSurat !== null ? ($dataSurat['suratNomor'] ?? '') : '';
-        } catch (\Throwable $e) {
-            $noSurat = '';
+        // Gunakan suratNomor hasil JOIN utama bila sudah tersedia untuk mencegah query N+1 ke r_surat
+        if (array_key_exists('suratNomor', $param)) {
+            $noSurat = (string) ($param['suratNomor'] ?? '');
+        } else {
+            try {
+                $tiket     = new \App\Models\ModelTicketing();
+                $enkripsi  = new \App\Libraries\Enkripsi();
+                $idSurat   = $enkripsi->decode($param['key']);
+                $dataSurat = $tiket->ambilSatu('r_surat', ['suratTrackingId' => (string) $idSurat]);
+                $noSurat   = $dataSurat !== false && $dataSurat !== null ? ($dataSurat['suratNomor'] ?? '') : '';
+            } catch (\Throwable $e) {
+                $noSurat = '';
+            }
         }
 
         $isOperator    = strpos($susrSgroupNama, 'OPERATOR');
-        $isProduksi    = strpos($susrSgroupNama, 'KASUBBAG');
+        $isProduksi    = (strpos($susrSgroupNama, 'KASUBBAG') !== false || strpos($susrSgroupNama, 'PRODUKSI') !== false);
         $isDisposisi   = (strpos($susrSgroupNama, 'DISPOSISI') !== false);
-        $isVerifikator = strpos($susrSgroupNama, 'KASUBBAG');
+        $isVerifikator = (strpos($susrSgroupNama, 'KASUBBAG') !== false || strpos($susrSgroupNama, 'VERIFIKATOR') !== false);
+
+        $kunciAman = esc((string) ($param['key'] ?? ''), 'attr');
+        $urutAman  = esc((string) ($param['urut'] ?? ''), 'attr');
+        $noSuratAman = esc((string) $noSurat, 'attr');
 
         $urlValidasi = $param['jenis'] === 'BOTTOMUP'
-            ? (' <a href="' . site_url('ticketing/last_validated') . '/' . $param['key'] . '" data-toggle="modal" title="Validasi Tiket" data-target="#nomor_surat"  data-val="' . $noSurat . '" data-linkkeys="' . site_url('ticketing/last_validated') . '/' . $param['key'] . '" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">')
+            ? (' <a href="' . site_url('ticketing/last_validated') . '/' . $kunciAman . '" data-toggle="modal" title="Validasi Tiket" data-target="#nomor_surat"  data-val="' . $noSuratAman . '" data-linkkeys="' . site_url('ticketing/last_validated') . '/' . $kunciAman . '" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">')
             : ($param['layanan'] === '116'
-                ? (' <a href="' . site_url('ticketing/validasiEktm') . '/' . $param['key'] . '" data-toggle="modal" title="Validasi Tiket" data-target="#ektm" data-linkkeys="' . site_url('ticketing/validasiEktm') . '/' . $param['key'] . '" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">')
-                : (' <a href="' . site_url('ticketing/last_validated') . '/' . $param['key'] . '" data-toggle="modal" data-target="#pesan_validasi" data-linkkeys="' . site_url('ticketing/last_validated') . '/' . $param['key'] . '/sehari" title="Validasi Tiket" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">'));
+                ? (' <a href="' . site_url('ticketing/validasiEktm') . '/' . $kunciAman . '" data-toggle="modal" title="Validasi Tiket" data-target="#ektm" data-linkkeys="' . site_url('ticketing/validasiEktm') . '/' . $kunciAman . '" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">')
+                : (' <a href="' . site_url('ticketing/last_validated') . '/' . $kunciAman . '" data-toggle="modal" data-target="#pesan_validasi" data-linkkeys="' . site_url('ticketing/last_validated') . '/' . $kunciAman . '/sehari" title="Validasi Tiket" class="btn btn-sm btn-outline-success btn-elevate btn-circle btn-icon">'));
 
         $isSurat    = ((($param['jenis'] ?? null) === 'BOTTOMUP' && $param['suratCreated'] === false) || empty($param['jenis'])) ? true : false;
         $isVerified = ((($param['isVerified'] ?? null) == 1 && ($param['jenis'] ?? null) === 'BOTTOMUP') || empty($param['jenis'])) ? true : false;
@@ -169,7 +178,8 @@ if (! function_exists('eult_tombol_aksi')) {
                         ';
                 }
 
-                if (($isDisposisi !== false) || ($isVerifikator !== false && $isVerified && $isSurat) && $param['isSehari'] == 2) {
+                // Pastikan pengecekan isSehari == 2 mengikat seluruh kondisi peran
+                if ((($isDisposisi !== false) || ($isVerifikator !== false && $isVerified && $isSurat)) && $param['isSehari'] == 2) {
                     $action .= ' <a href="' . site_url('ticketing/accept') . '/' . $param['key'] . '" data-toggle="kt-tooltip" title="Paraf dan Disposisi" id="ts_accept_row' . $param['urut'] . '" class="ts_accept_row btn btn-sm btn-outline-warning btn-elevate btn-circle btn-icon">
                         <span>
                         <i class="fa fa-play"></i>

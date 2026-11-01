@@ -60,6 +60,10 @@
             <file>./tests/Bugfix/T2M3RateLimitHttpIntegrationTest.php</file>
             <file>./tests/Bugfix/T3CookieCaptchaBypassExplorationTest.php</file>
             <file>./tests/Bugfix/T4RatingOwnershipExplorationTest.php</file>
+            <file>./tests/Bugfix/RemediasiKritisAudit2026Test.php</file>
+            <file>./tests/Bugfix/RemediasiTinggiAudit2026Test.php</file>
+            <file>./tests/Bugfix/RemediasiSedangAudit2026Test.php</file>
+            <file>./tests/Bugfix/RemediasiRendahAudit2026Test.php</file>
         </testsuite>
         <testsuite name="Live">
             <file>./tests/Bugfix/CektiketUploadPdfOnlyHttpIntegrationTest.php</file>

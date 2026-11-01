@@ -133,7 +133,9 @@ class Login extends BaseController
     {
         $aturan = [
             'captcha'          => 'required',
+            'ticketName'       => 'required',
             'ticketCategories' => 'required',
+            'ticketPriority'   => 'required',
             'ticketEmail'      => 'required|valid_email',
             'ticketNoHp'       => 'required',
             'ticketSubject'    => 'required',
@@ -208,6 +210,13 @@ class Login extends BaseController
         }
 
         $nama     = (string) $this->request->getPost('ticketName');
+        // Gunakan nama resmi hasil verifikasi OSM apabila pemohon berstatus internal
+        if ($rolePemohon === 'internal') {
+            $namaTerverifikasi = eult_pemohon_nama($identitasPemohon);
+            if ($namaTerverifikasi !== null) {
+                $nama = $namaTerverifikasi;
+            }
+        }
         $email    = (string) $this->request->getPost('ticketEmail');
         $kodeAcak = eult_generate_kode();
 
@@ -244,7 +253,9 @@ class Login extends BaseController
 
         $serupa = $this->tiket->tiketSerupa($identitas, $subjek, $pesan);
 
-        if ($serupa !== false) {
+        // Hanya kembalikan nomor tiket serupa jika alamat email pemohon cocok dengan pemilik tiket asli
+        if ($serupa !== false && strcasecmp(trim((string) ($serupa['ticketEmail'] ?? '')), trim($email)) === 0) {
+            eult_captcha_generate(4);
             log_message('info', 'EULT savetiket: permintaan serupa dikenali, memakai tiket {tiket}', ['tiket' => $serupa['ticketTrackingId']]);
 
             return $this->response->setJSON([
@@ -415,13 +426,15 @@ class Login extends BaseController
         $mhs = $this->osm->mhsId2($id);
 
         if (is_object($mhs) && ! empty($mhs->nim)) {
+            $namaMhs = (string) ($mhs->peserta_didik->nama ?? '');
             // Terverifikasi OSM sebagai mahasiswa -> boleh semua layanan.
             eult_pemohon_role_simpan($id, 'internal');
+            eult_pemohon_nama_simpan($id, $namaMhs);
 
             return $this->response->setJSON([
                 'status'  => true,
                 'ismhs'   => true,
-                'datamhs' => ['name' => $mhs->peserta_didik->nama ?? ''],
+                'datamhs' => ['name' => $namaMhs],
             ]);
         }
 
@@ -431,6 +444,7 @@ class Login extends BaseController
 
             // Terverifikasi OSM sebagai pegawai -> boleh semua layanan.
             eult_pemohon_role_simpan($id, 'internal');
+            eult_pemohon_nama_simpan($id, (string) $nama);
 
             return $this->response->setJSON([
                 'status'      => true,
@@ -507,7 +521,7 @@ class Login extends BaseController
         if ($syarat !== false) {
             $daftar = '<h5>Persyaratan File yang harus Upload</h5><ol>';
             foreach ($syarat as $r) {
-                $daftar .= '<li>' . $r['berkasNama'] . '</li>';
+                $daftar .= '<li>' . esc((string) ($r['berkasNama'] ?? '')) . '</li>';
             }
             $daftar .= '</ol>';
         } else {

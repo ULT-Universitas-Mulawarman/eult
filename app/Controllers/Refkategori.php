@@ -105,7 +105,9 @@ class Refkategori extends BaseController
             'scripts'     => [],
             'save_url'    => site_url($this->controllerName . '/save_sub') . '/',
             'status_page' => 'Create',
-            'datas'       => $this->kategori->ambilSatu('r_category_sub', ['sCatId' => $id]),
+            'datas'       => (is_string($id) && $id !== '')
+                ? $this->kategori->ambilSatu('r_category_sub', ['sCatId' => $id])
+                : false,
         ])]);
     }
 
@@ -123,7 +125,11 @@ class Refkategori extends BaseController
         ];
 
         if ($idLama === '') {
-            $param['sCatCategoryId'] = $this->enkripsi->decode((string) $this->request->getPost('sCatCategoryId'));
+            $kategoriInduk = $this->enkripsi->decode((string) $this->request->getPost('sCatCategoryId'));
+            if (! is_string($kategoriInduk) || $kategoriInduk === '') {
+                eult_message_kirim('Kunci layanan induk tidak valid.', 'error');
+            }
+            $param['sCatCategoryId'] = $kategoriInduk;
             $proses                  = $this->kategori->tambah('r_category_sub', $param);
         } else {
             $param['sCatCategoryId'] = (string) $this->request->getPost('sCatCategoryId');
@@ -140,12 +146,15 @@ class Refkategori extends BaseController
 
     public function update(string $kunci = ''): string
     {
-        $terbuka          = $this->enkripsi->decode($kunci);
-        $data             = $this->getMaster($this->pathPage . 'form');
-        $data['scripts']  = [];
-        $data['save_url'] = site_url($this->controllerName . '/save') . '/';
+        $terbuka              = $this->enkripsi->decode($kunci);
+        $data                 = $this->getMaster($this->pathPage . 'form');
+        $data['scripts']      = [];
+        $data['save_url']     = site_url($this->controllerName . '/save') . '/';
+        $data['delete_url']   = site_url($this->controllerName . '/delete') . '/';
         $data['status_page']  = 'Update';
-        $data['datas']        = $this->kategori->byId(['categoryId' => $terbuka]);
+        $data['datas']        = (is_string($terbuka) && $terbuka !== '')
+            ? $this->kategori->byId(['categoryId' => $terbuka])
+            : false;
         $data['s_user_group'] = $this->kategori->tabelRef('s_user_group');
 
         return view($this->template, $data);
@@ -178,10 +187,32 @@ class Refkategori extends BaseController
         $event = (string) $this->request->getPost('event');
 
         if ($event === 'category') {
-            $proses = $this->kategori->hapus('r_category', ['categoryId' => $kunci])
-                && $this->kategori->hapus('r_category_sub', ['sCatCategoryId' => $kunci]);
+            $terbuka = $this->enkripsi->decode($kunci);
+            if (! is_string($terbuka) || $terbuka === '') {
+                // Dukung ID numerik murni hanya untuk kompatibilitas modal lama jika dikirim positif
+                if ($kunci !== '' && ctype_digit($kunci) && (int) $kunci > 0) {
+                    $terbuka = $kunci;
+                } else {
+                    eult_message_kirim('Kunci layanan tidak valid.', 'error');
+                }
+            }
+
+            $db = $this->kategori->dbAktif();
+            $db->transBegin();
+            // Hapus sub-layanan terlebih dahulu sebelum layanan induk agar atomik
+            $this->kategori->hapus('r_category_sub', ['sCatCategoryId' => $terbuka]);
+            $proses = $this->kategori->hapus('r_category', ['categoryId' => $terbuka]);
+            if ($proses && $db->transStatus() !== false) {
+                $db->transCommit();
+            } else {
+                $db->transRollback();
+                $proses = false;
+            }
         } else {
             $terbuka = $this->enkripsi->decode($kunci);
+            if (! is_string($terbuka) || $terbuka === '') {
+                eult_message_kirim('Kunci sub layanan tidak valid.', 'error');
+            }
             $proses  = $this->kategori->hapus('r_category_sub', ['sCatId' => $terbuka]);
         }
 

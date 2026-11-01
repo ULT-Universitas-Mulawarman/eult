@@ -12,6 +12,26 @@ class ModelLaporan extends ModelMaster
     protected $returnType = 'array';
 
     /**
+     * Menormalisasi batas awal (00:00:00) dan batas akhir (23:59:59) tanggal laporan.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function normalisasiBatasTanggal(string $awal, string $akhir): array
+    {
+        $awal  = trim($awal);
+        $akhir = trim($akhir);
+
+        if (strlen($awal) === 10) {
+            $awal .= ' 00:00:00';
+        }
+        if (strlen($akhir) === 10) {
+            $akhir .= ' 23:59:59';
+        }
+
+        return [$awal, $akhir];
+    }
+
+    /**
      * Rekap per unit dalam rentang tanggal.
      *
      * @param array{0:string,1:string} $rentang [tglAwal, tglAkhir] format Y-m-d
@@ -19,7 +39,7 @@ class ModelLaporan extends ModelMaster
      */
     public function getLaporan(array $rentang): array|false
     {
-        [$tglAwal, $tglAkhir] = $rentang;
+        [$tglAwal, $tglAkhir] = $this->normalisasiBatasTanggal((string) ($rentang[0] ?? ''), (string) ($rentang[1] ?? ''));
         $refDb = $this->dbUltName();
 
         $hasil = $this->db->table('d_ticketing')
@@ -46,6 +66,7 @@ class ModelLaporan extends ModelMaster
      */
     public function getLaporanLayanan(string $tanggalAwal, string $tanggalAkhir, string $grup, string $kategori = ''): array|false
     {
+        [$awal, $akhir] = $this->normalisasiBatasTanggal($tanggalAwal, $tanggalAkhir);
         $refDb = $this->dbUltName();
 
         $sub = $this->db->table('d_ticketing')
@@ -54,7 +75,8 @@ class ModelLaporan extends ModelMaster
             ->join("{$refDb}.ref_unit", 'layananunitId = unitId', 'left')
             ->join("{$refDb}.ref_jenis_layanan", 'jenislayananId = layananjenisId', 'left')
             ->join('s_user_group', 'sgroupCategoryId = unitId', 'left')
-            ->where("(ticketCreated BETWEEN '" . $this->db->escapeString($tanggalAwal) . "' AND '" . $this->db->escapeString($tanggalAkhir) . "')", null, false)
+            ->where('ticketCreated >=', $awal)
+            ->where('ticketCreated <=', $akhir)
             ->groupBy('ticketTrackingId');
 
         if ($grup === 'ADMIN' || strpos($grup, 'OPERATOR') !== false) {

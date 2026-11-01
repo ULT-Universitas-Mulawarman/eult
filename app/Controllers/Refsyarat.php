@@ -59,7 +59,9 @@ class Refsyarat extends BaseController
         $data['scripts']     = [];
         $data['save_url']    = site_url($this->controllerName . '/save') . '/';
         $data['status_page'] = 'Update';
-        $data['datas']       = $this->syarat->byId(['berkasId' => $terbuka]);
+        $data['datas']       = (is_string($terbuka) && $terbuka !== '')
+            ? $this->syarat->byId(['berkasId' => $terbuka])
+            : false;
         $data['ref_layanan'] = $this->syarat->tabelRef($this->syarat->refUlt('ref_layanan'));
 
         return view($this->template, $data);
@@ -91,6 +93,12 @@ class Refsyarat extends BaseController
     {
         $kunci ??= (string) $this->request->getPost('key');
         $terbuka = $this->enkripsi->decode($kunci);
+
+        // Tolak kunci rusak/kosong sebelum menyentuh query DELETE
+        if (! is_string($terbuka) || $terbuka === '') {
+            eult_message_kirim('Kunci persyaratan tidak valid.', 'error');
+        }
+
         $proses  = $this->syarat->hapus('r_berkas_layanan', ['berkasId' => $terbuka]);
 
         if (! empty($proses)) {

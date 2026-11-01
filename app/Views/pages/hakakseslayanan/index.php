@@ -11,13 +11,13 @@
                 <div class="kt-portlet__head">
                     <div class="kt-portlet__head-label">
                         <h3 class="kt-portlet__head-title">
-                            <?=strtoupper($page_judul)?>
+                            <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                         </h3>
                     </div>
                 </div>
 
                 <!--begin::Form-->
-                <form class="kt-form" action="<?=$show_url?>" method="post" id="form_show">
+                <form class="kt-form" action="<?= esc($show_url ?? '') ?>" method="post" id="form_show">
                     <?= csrf_field() ?>
                     <div class="kt-portlet__body">
                         <div class="form-group">
@@ -25,8 +25,8 @@
                             <select class="form-control m-select2" name="hakakses">
                                 <option value=""></option>
                                 <?php 
-                            foreach($s_user_group as $row):
-                                echo '<option value="'.$row['sgroupNama'].'" >'.$row['sgroupNama'].' - '.$row['sgroupKeterangan'].'</option>';
+                            foreach (($s_user_group ?: []) as $row):
+                                echo '<option value="' . esc((string) ($row['sgroupNama'] ?? ''), 'attr') . '" >' . esc((string) ($row['sgroupNama'] ?? '') . ' - ' . (string) ($row['sgroupKeterangan'] ?? '')) . '</option>';
                             endforeach;
                             ?>
                             </select>

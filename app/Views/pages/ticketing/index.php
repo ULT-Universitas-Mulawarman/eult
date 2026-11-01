@@ -35,8 +35,8 @@
                                         </span>
                                         <button type="button" class="btn btn-sm btn-pill btn-brand active status-pill" data-status="" data-filter="all">Semua</button>
                                         <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="1" data-filter="baru">Baru</button>
-                                        <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="2" data-filter="disposisi">Disposisi</button>
-                                        <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="3" data-filter="verifikasi">Verifikasi</button>
+                                        <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="3" data-filter="disposisi">Disposisi</button>
+                                        <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="7" data-filter="verifikasi">Verifikasi</button>
                                         <button type="button" class="btn btn-sm btn-pill btn-outline-secondary status-pill" data-status="5" data-filter="selesai">Selesai</button>
                                         <input type="hidden" name="status_layanan" id="filter_status_layanan" value="">
                                     </div>
@@ -118,25 +118,10 @@ document.addEventListener('DOMContentLoaded', function() {
         $(this).removeClass('btn-outline-secondary').addClass('btn-brand active text-white');
 
         var statusVal = $(this).data('status');
-        var filterVal = ($(this).data('filter') || '').toString().toLowerCase();
         $('#filter_status_layanan').val(statusVal);
 
-        // Filter langsung baris tabel yang sudah dimuat
-        var $rows = $('#response table tbody tr');
-        if ($rows.length > 0) {
-            if (filterVal === 'all' || !filterVal) {
-                $rows.show();
-            } else {
-                $rows.each(function() {
-                    var rowText = $(this).text().toLowerCase();
-                    if (rowText.indexOf(filterVal) !== -1) {
-                        $(this).show();
-                    } else {
-                        $(this).hide();
-                    }
-                });
-            }
-        }
+        // Muat ulang tabel tiket sesuai filter status dari server
+        $('#btn_show').trigger('click');
     });
 
     // Filter instan berdasarkan kata kunci pencarian

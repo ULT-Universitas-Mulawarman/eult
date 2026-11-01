@@ -1,3 +1,10 @@
+<?php
+// Ekstrak kata pertama dan inisial profil secara aman untuk nama satu kata maupun multi-kata
+$profilLengkap = trim((string) ($susrProfil ?? ''));
+$kataProfil    = preg_split('/\s+/', $profilLengkap);
+$namaPendek    = $kataProfil !== false && ($kataProfil[0] ?? '') !== '' ? $kataProfil[0] : $profilLengkap;
+$inisialProfil = $profilLengkap !== '' ? mb_substr($profilLengkap, 0, 1) : '';
+?>
 <!-- begin:: Header -->
 <div id="kt_header" class="kt-header kt-grid__item  kt-header--fixed ">
 	<div>
@@ -12,11 +19,11 @@
 			<div class="kt-header__topbar-wrapper" data-toggle="dropdown" data-offset="0px,0px">
 				<div class="kt-header__topbar-user">
 					<span class="kt-header__topbar-welcome kt-hidden-mobile">Hi,</span>
-					<span class="kt-header__topbar-username kt-hidden-mobile"><?= substr($susrProfil, 0, strpos($susrProfil, ' ')) ?></span>
+					<span class="kt-header__topbar-username kt-hidden-mobile"><?= esc($namaPendek) ?></span>
 					<img class="kt-hidden" alt="Pic" src="<?= base_url(); ?>assets/media/users/default.jpg" />
 
 					<!--use below badge element instead the user avatar to display username's first letter(remove kt-hidden class to display it) -->
-					<span class="kt-badge kt-badge--username kt-badge--unified-success kt-badge--lg kt-badge--rounded kt-badge--bold"><?= substr($susrProfil, 0, 1) ?></span>
+					<span class="kt-badge kt-badge--username kt-badge--unified-success kt-badge--lg kt-badge--rounded kt-badge--bold"><?= esc($inisialProfil) ?></span>
 				</div>
 			</div>
 			<div class="dropdown-menu dropdown-menu-fit dropdown-menu-right dropdown-menu-anim dropdown-menu-top-unround dropdown-menu-xl">
@@ -27,13 +34,13 @@
 						<img class="kt-hidden" alt="Pic" src="<?= base_url(); ?>assets/media/users/default.jpg" />
 
 						<!--use below badge element instead the user avatar to display username's first letter(remove kt-hidden class to display it) -->
-						<span class="kt-badge kt-badge--lg kt-badge--rounded kt-badge--bold kt-font-success"><?= substr($susrProfil, 0, 1) ?></span>
+						<span class="kt-badge kt-badge--lg kt-badge--rounded kt-badge--bold kt-font-success"><?= esc($inisialProfil) ?></span>
 					</div>
 					<div class="kt-user-card__name">
-						<?= $susrProfil ?>
+						<?= esc($profilLengkap) ?>
 					</div>
 					<div class="kt-user-card__badge">
-						<span class="btn btn-success btn-sm btn-bold btn-font-md"><?= $susrSgroupNama ?></span>
+						<span class="btn btn-success btn-sm btn-bold btn-font-md"><?= esc((string) ($susrSgroupNama ?? '')) ?></span>
 					</div>
 				</div>
 

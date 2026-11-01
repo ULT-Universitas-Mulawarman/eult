@@ -112,21 +112,21 @@ class Otentifikasi extends BaseController
         }
 
         $datas = $this->masuk->ambilSatu('s_user', ['susrNama' => $username]);
-
-        if (isset($proses->data) && $datas !== false) {
-            if ($datas['susrNama'] == $proses->data->id) {
-                $this->dataSesi = $this->bangunSesi($datas);
-
-                return true;
-            }
-        } elseif ($datas !== false) {
-            if (password_verify($sandi, (string) $datas['susrPassword'])) {
-                $this->dataSesi = $this->bangunSesi($datas);
-
-                return true;
-            }
-
+        if ($datas === false) {
             return false;
+        }
+
+        if (isset($proses->data) && ($proses->data->id ?? null) == $datas['susrNama']) {
+            $this->dataSesi = $this->bangunSesi($datas);
+
+            return true;
+        }
+
+        // Selalu fallback ke verifikasi hash password lokal apabila OSM gagal atau ID tidak cocok
+        if (! empty($datas['susrPassword']) && password_verify($sandi, (string) $datas['susrPassword'])) {
+            $this->dataSesi = $this->bangunSesi($datas);
+
+            return true;
         }
 
         return false;

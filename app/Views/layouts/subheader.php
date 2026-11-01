@@ -54,22 +54,30 @@
 					if (!empty($notiftiket)) {
 						$i = 1;
 						foreach ($notiftiket as $row) {
-							$key = service('enkripsi')->encode($row['repliesTicketId']);
-							?>
-							<?php
-								if ($row['jumlah'] != 0) {
+							$idTiketNotif = (string) ($row['ticketTrackingId'] ?? ($row['repliesTicketId'] ?? ''));
+							if ($idTiketNotif === '') {
+								continue;
+							}
+							$jumlahPesan = (int) ($row['jumlah'] ?? 0);
+							$isDisposisiBaru = ($jumlahPesan === 0 && (int) ($row['ticketStatus'] ?? 0) === 3 && empty($row['disposisiIsTrue']));
+							if ($jumlahPesan > 0 || $isDisposisiBaru) {
+								$key = service('enkripsi')->encode($idTiketNotif);
 								?>
-							<a href="<?= ($detail_url ?? site_url('ticketing/detail/')) . $key ?>" class="kt-notification__item">
+							<a href="<?= esc(($detail_url ?? site_url('ticketing/detail/')) . $key) ?>" class="kt-notification__item">
         								<div class="kt-notification__item-icon">
         									<i class="flaticon2-bell-1 kt-font-success"></i>
         								</div>
 										
         								<div class="kt-notification__item-details">
         									<div class="kt-notification__item-title">
-									<?= esc($row['repliesTicketId']) ?>
+									<?= esc($idTiketNotif) ?>
 										<br>
-										<?= esc($row['categoryNama']) ?>
-										<span class="btn btn-success btn-sm btn-bold btn-font-md"><?= esc($row['jumlah']) ?> Pesan Baru</span>
+										<?= esc($row['categoryNama'] ?? '') ?>
+										<?php if ($jumlahPesan > 0) : ?>
+											<span class="btn btn-success btn-sm btn-bold btn-font-md"><?= esc((string) $jumlahPesan) ?> Pesan Baru</span>
+										<?php else : ?>
+											<span class="btn btn-brand btn-sm btn-bold btn-font-md">Disposisi Baru</span>
+										<?php endif; ?>
         									</div>
         								</div>
         							</a>

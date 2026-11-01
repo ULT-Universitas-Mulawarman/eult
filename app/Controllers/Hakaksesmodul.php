@@ -62,14 +62,27 @@ class Hakaksesmodul extends BaseController
             eult_message_kirim('Pilih Menu!! Minimal 1', 'error');
         }
 
-        $this->matriks->hapus('s_user_group_modul', ['sgroupmodulSgroupNama' => $grup]);
+        // Bungkus penghapusan dan penyisipan ulang hak akses modul dalam satu transaksi
+        $db = $this->matriks->dbAktif();
+        $db->transStart();
+        $berhasil = $this->matriks->hapus('s_user_group_modul', ['sgroupmodulSgroupNama' => $grup]);
 
-        foreach ($dipilih as $modul) {
-            $this->matriks->tambah('s_user_group_modul', [
-                'sgroupmodulSgroupNama'     => $grup,
-                'sgroupmodulSusrmodulNama'  => $modul,
-                'sgroupmodulSusrmodulRead'  => 1,
-            ]);
+        if ($berhasil) {
+            foreach ($dipilih as $modul) {
+                if (! $this->matriks->tambah('s_user_group_modul', [
+                    'sgroupmodulSgroupNama'    => $grup,
+                    'sgroupmodulSusrmodulNama' => $modul,
+                    'sgroupmodulSusrmodulRead' => 1,
+                ])) {
+                    $berhasil = false;
+                    break;
+                }
+            }
+        }
+        $db->transComplete();
+
+        if (! $db->transStatus() || ! $berhasil) {
+            eult_message_kirim($this->judul . ' Gagal Disimpan', 'error');
         }
 
         eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');

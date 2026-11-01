@@ -37,10 +37,17 @@
                                 <?php if (! empty($datas)) : ?>
                                     <?php $no = 1; ?>
                                     <?php foreach ($datas as $row) : ?>
+                                        <?php
+                                        // Utamakan nama unit hasil pemetaan s_user_group_unit bila kolom sgroupUnit kosong
+                                        $namaUnitGrup = trim((string) ($row['unitTerpetakan'] ?? ''));
+                                        if ($namaUnitGrup === '') {
+                                            $namaUnitGrup = trim((string) ($row['sgroupUnit'] ?? ''));
+                                        }
+                                        ?>
                                         <tr>
                                             <td><?= $no++ ?></td>
                                             <td><?= esc($row['sgroupNama'] ?? '') ?></td>
-                                            <td><?= esc($row['sgroupUnit'] ?? '') ?></td>
+                                            <td><?= esc($namaUnitGrup !== '' ? $namaUnitGrup : '-') ?></td>
                                             <td><?= esc($row['sgroupKeterangan'] ?? '') ?></td>
                                         </tr>
                                     <?php endforeach; ?>

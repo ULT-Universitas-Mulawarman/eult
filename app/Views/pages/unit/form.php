@@ -13,25 +13,25 @@
                 <div class="kt-portlet__head">
                     <div class="kt-portlet__head-label">
                         <h3 class="kt-portlet__head-title">
-                            <?= strtoupper($page_judul) ?>
+                            <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                         </h3>
                     </div>
                 </div>
 
                 <!--begin::Form-->
-                <form class="kt-form" action="<?= $save_url ?>" method="post" id="form_form">
+                <form class="kt-form" action="<?= esc($save_url ?? '') ?>" method="post" id="form_form">
                     <?= csrf_field() ?>
                     <div class="kt-portlet__body">
-                        <input type="hidden" name="unitIdOld" value="<?= $datas != false ? $datas['unitId'] : '' ?>">
+                        <input type="hidden" name="unitIdOld" value="<?= $datas != false ? esc((string) ($datas['unitId'] ?? ''), 'attr') : '' ?>">
 
                         <div class="form-group">
                             <label>Kode Unit</label>
-                            <input type="text" class="form-control" name="unitKode" placeholder="Kode Unit" aria-describedby="Kode Unit" value="<?= $datas != false ? $datas['unitKode'] : '' ?>">
+                            <input type="text" class="form-control" name="unitKode" placeholder="Kode Unit" aria-describedby="Kode Unit" value="<?= $datas != false ? esc((string) ($datas['unitKode'] ?? ''), 'attr') : '' ?>">
                         </div>
 
                         <div class="form-group">
                             <label>Nama Unit</label>
-                            <input type="text" class="form-control" name="unitNama" placeholder="Nama Unit" aria-describedby="Nama Unit" value="<?= $datas != false ? $datas['unitNama'] : '' ?>">
+                            <input type="text" class="form-control" name="unitNama" placeholder="Nama Unit" aria-describedby="Nama Unit" value="<?= $datas != false ? esc((string) ($datas['unitNama'] ?? ''), 'attr') : '' ?>">
                         </div>
 
                     </div>

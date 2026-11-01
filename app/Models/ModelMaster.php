@@ -221,7 +221,31 @@ class ModelMaster extends \CodeIgniter\Model
 
         $baris = $builder->get()->getRowArray();
 
-        return $baris ?? false;
+        // Kembalikan false bila tidak ada baris yang cocok (MAX menghasilkan NULL)
+        if ($baris === null || ($baris[$kolom] ?? null) === null) {
+            return false;
+        }
+
+        return $baris;
+    }
+
+    /**
+     * Mengambil daftar grup pengguna beserta nama unit kerja yang terpetakan di s_user_group_unit.
+     *
+     * @return array<int, array<string, mixed>>|false
+     */
+    public function daftarGrupDenganUnit(): array|false
+    {
+        $hasil = $this->db->table('s_user_group g')
+            ->select("g.*, GROUP_CONCAT(DISTINCT u.unitNama ORDER BY u.unitKode ASC SEPARATOR ', ') AS unitTerpetakan", false)
+            ->join('s_user_group_unit gu', 'gu.sgroupunitSgroupNama = g.sgroupNama', 'left')
+            ->join('s_unit u', 'u.unitId = gu.sgroupunitUnitId', 'left')
+            ->groupBy('g.sgroupNama')
+            ->orderBy('g.sgroupNama', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $hasil === [] ? false : $hasil;
     }
 
     /**
@@ -496,25 +520,43 @@ class ModelMaster extends \CodeIgniter\Model
     }
 
     /**
+     * Subquery SQL yang memilih tepat satu baris disposisi terakhir per tiket
+     * menggunakan kunci komposit (disposisiTicketId, MAX(disposisiTanggal), MAX(disposisiUnit)).
+     */
+    protected function subDisposisiTerakhir(): string
+    {
+        $subTgl = $this->db->table('d_disposisi')
+            ->select('disposisiTicketId, MAX(disposisiTanggal) AS maxTanggal')
+            ->groupBy('disposisiTicketId')
+            ->getCompiledSelect();
+
+        $subKunci = $this->db->newQuery()
+            ->select('dt.disposisiTicketId, dt.disposisiTanggal AS maxTanggal, MAX(dt.disposisiUnit) AS maxUnit')
+            ->from('d_disposisi dt')
+            ->join('(' . $subTgl . ') st', 'dt.disposisiTicketId = st.disposisiTicketId AND dt.disposisiTanggal = st.maxTanggal')
+            ->groupBy(['dt.disposisiTicketId', 'dt.disposisiTanggal'])
+            ->getCompiledSelect();
+
+        return $this->db->newQuery()
+            ->select('d_disposisi.*')
+            ->from('(' . $subKunci . ') as dk')
+            ->join(
+                'd_disposisi',
+                'd_disposisi.disposisiTicketId = dk.disposisiTicketId AND d_disposisi.disposisiTanggal = dk.maxTanggal AND d_disposisi.disposisiUnit = dk.maxUnit'
+            )
+            ->getCompiledSelect();
+    }
+
+    /**
      * Notifikasi tiket untuk ADMIN/OPERATOR (replies belum dibaca).
      */
     public function dataNotif(array|string $kondisi = ''): array|false
     {
         $refDb = $this->dbUltName();
-
-        $sub1 = $this->db->table('d_disposisi')
-            ->select('disposisiTicketId mDisp,MAX(disposisiTanggal) mTgl')
-            ->groupBy('disposisiTicketId')
-            ->getCompiledSelect();
-
-        $sub2 = $this->db->newQuery()
-            ->select('d_disposisi.*')
-            ->from('(' . $sub1 . ') as d')
-            ->join('d_disposisi', 'mDisp = disposisiTicketId AND mTgl = disposisiTanggal')
-            ->getCompiledSelect();
+        $sub2  = $this->subDisposisiTerakhir();
 
         $builder = $this->db->table('d_ticketing')
-            ->select("d_ticketing.*,{$refDb}.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,d_archive.*,
+            ->select("d_ticketing.*,{$refDb}.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
                     ref_layanan.layananNama sCatNama,
@@ -529,10 +571,9 @@ class ModelMaster extends \CodeIgniter\Model
             ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
-            ->join('d_archive', 'archiveTrackingId = ticketTrackingId', 'LEFT')
             ->join('s_unit sunit', 'ticketAssign = sunit.unitId', 'left')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
-            ->groupBy('repliesTicketId')
+            ->groupBy('ticketTrackingId')
             ->orderBy('disposisiTanggal DESC');
 
         if (! empty($kondisi)) {
@@ -550,17 +591,7 @@ class ModelMaster extends \CodeIgniter\Model
     public function disposisiNotif(array|string $kondisi): array|false
     {
         $refDb = $this->dbUltName();
-
-        $sub1 = $this->db->table('d_disposisi')
-            ->select('disposisiTicketId mDisp,MAX(disposisiTanggal) mTgl')
-            ->groupBy('disposisiTicketId')
-            ->getCompiledSelect();
-
-        $sub2 = $this->db->newQuery()
-            ->select('d_disposisi.*')
-            ->from('(' . $sub1 . ') as d')
-            ->join('d_disposisi', 'mDisp = disposisiTicketId AND mTgl = disposisiTanggal')
-            ->getCompiledSelect();
+        $sub2  = $this->subDisposisiTerakhir();
 
         $hasil = $this->db->table('d_ticketing')
             ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,{$refDb}.ref_jenis_layanan.*,
@@ -584,7 +615,7 @@ class ModelMaster extends \CodeIgniter\Model
             ->join('s_user_group_unit', 'sgroupunitUnitId = disposisiUnit', 'left')
             ->join('s_unit d_unit', 'disposisiUnit = d_unit.unitId', 'left')
             ->where($kondisi)
-            ->groupBy('repliesTicketId')
+            ->groupBy('ticketTrackingId')
             ->orderBy('disposisiTanggal DESC')
             ->get()->getResultArray();
 

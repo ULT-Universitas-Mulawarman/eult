@@ -33,7 +33,7 @@ class ModelValidasifile extends ModelMaster
 
     private function inisiasiDirektori(): void
     {
-        foreach (['', 'ticketing/', 'chat/', 'qrcode/', '_quarantine/', '_quarantine/ticketing/', '_quarantine/chat/'] as $dir) {
+        foreach (['', 'ticketing/', 'chat/', 'qrcode/', '_quarantine/', '_quarantine/ticketing/', '_quarantine/chat/', '_quarantine/qrcode/'] as $dir) {
             $lokasi = ($dir === '' ? rtrim($this->uploadPath, '/') : $this->uploadPath . rtrim($dir, '/'));
             if (! is_dir($lokasi)) {
                 @mkdir($lokasi, 0755, true);
@@ -425,6 +425,37 @@ class ModelValidasifile extends ModelMaster
     }
 
     /**
+     * Menentukan folder asal berkas terkarantina berdasarkan manifest atau keberadaan di disk.
+     *
+     * @param array{quarantined?: array<string, mixed>} $manifest
+     */
+    private function tentukanFolderKarantina(string $namaFile, string $folderDefault, array $manifest): string
+    {
+        $daftarKarantina = is_array($manifest['quarantined'] ?? null) ? $manifest['quarantined'] : [];
+
+        // Prioritaskan folder yang dikirim apabila berkas memang terdaftar/ada di sana
+        if (isset($daftarKarantina[$folderDefault . ':' . $namaFile]) || file_exists($this->quarantinePath . $folderDefault . '/' . $namaFile)) {
+            return $folderDefault;
+        }
+
+        // Cari folder asal sebenarnya dari manifest.json
+        foreach ($daftarKarantina as $item) {
+            if (is_array($item) && ($item['filename'] ?? '') === $namaFile && ! empty($item['folder'])) {
+                return basename((string) $item['folder']);
+            }
+        }
+
+        // Fallback pemindaian subdirektori karantina yang dikenal
+        foreach (['ticketing', 'chat', 'qrcode'] as $kandidat) {
+            if (file_exists($this->quarantinePath . $kandidat . '/' . $namaFile)) {
+                return $kandidat;
+            }
+        }
+
+        return $folderDefault;
+    }
+
+    /**
      * @param list<string> $daftarNama
      * @return array{status:bool,success_count:int,failed_count:int,failed_files:list<array<string, string>>}
      */
@@ -435,10 +466,11 @@ class ModelValidasifile extends ModelMaster
         $gagal    = [];
 
         foreach ($daftarNama as $namaFile) {
-            $namaFile = basename($namaFile);
-            $asal     = $this->quarantinePath . $folder . '/' . $namaFile;
-            $dirTujuan = $this->uploadPath . $folder . '/';
-            $tujuan   = $dirTujuan . $namaFile;
+            $namaFile   = basename($namaFile);
+            $folderAsal = $this->tentukanFolderKarantina($namaFile, $folder, $manifest);
+            $asal       = $this->quarantinePath . $folderAsal . '/' . $namaFile;
+            $dirTujuan  = $this->uploadPath . $folderAsal . '/';
+            $tujuan     = $dirTujuan . $namaFile;
 
             if (! file_exists($asal)) {
                 $gagal[] = ['file' => $namaFile, 'error' => 'File tidak ditemukan di folder karantina'];
@@ -451,11 +483,11 @@ class ModelValidasifile extends ModelMaster
 
             if (rename($asal, $tujuan)) {
                 $sukses++;
-                unset($manifest['quarantined'][$folder . ':' . $namaFile]);
+                unset($manifest['quarantined'][$folderAsal . ':' . $namaFile]);
                 $manifest['history'][] = [
                     'action'    => 'RESTORE',
                     'filename'  => $namaFile,
-                    'folder'    => $folder,
+                    'folder'    => $folderAsal,
                     'timestamp' => date('Y-m-d H:i:s'),
                     'user'      => $pengguna,
                 ];
@@ -485,8 +517,9 @@ class ModelValidasifile extends ModelMaster
         $gagal    = [];
 
         foreach ($daftarNama as $namaFile) {
-            $namaFile = basename($namaFile);
-            $target   = $this->quarantinePath . $folder . '/' . $namaFile;
+            $namaFile   = basename($namaFile);
+            $folderAsal = $this->tentukanFolderKarantina($namaFile, $folder, $manifest);
+            $target     = $this->quarantinePath . $folderAsal . '/' . $namaFile;
 
             if (! file_exists($target)) {
                 $gagal[] = ['file' => $namaFile, 'error' => 'File tidak ditemukan di folder karantina'];
@@ -495,11 +528,11 @@ class ModelValidasifile extends ModelMaster
 
             if (@unlink($target)) {
                 $sukses++;
-                unset($manifest['quarantined'][$folder . ':' . $namaFile]);
+                unset($manifest['quarantined'][$folderAsal . ':' . $namaFile]);
                 $manifest['history'][] = [
                     'action'    => 'DELETE_PERMANENT',
                     'filename'  => $namaFile,
-                    'folder'    => $folder,
+                    'folder'    => $folderAsal,
                     'timestamp' => date('Y-m-d H:i:s'),
                     'user'      => $pengguna,
                 ];

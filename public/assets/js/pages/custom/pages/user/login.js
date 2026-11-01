@@ -316,6 +316,11 @@ var KTLoginGeneral = function () {
                         }, 2e3);
 
                     }
+                },
+                error: function () {
+                    // Pulihkan tombol submit bila terjadi galat jaringan atau pembatasan laju (429/500)
+                    btn.removeClass('kt-spinner kt-spinner--right kt-spinner--sm kt-spinner--light').attr('disabled', false);
+                    showErrorMsg(form, 'danger', 'Terjadi kesalahan jaringan atau batas percobaan terlampaui. Silakan coba lagi.');
                 }
             });
         });
@@ -364,6 +369,11 @@ var KTLoginGeneral = function () {
                         }, 2e3);
 
                     }
+                },
+                error: function () {
+                    // Pulihkan tombol submit bila terjadi galat jaringan atau pembatasan laju (429/500)
+                    btn.removeClass('kt-spinner kt-spinner--right kt-spinner--sm kt-spinner--light').attr('disabled', false);
+                    showErrorMsg(form, 'danger', 'Terjadi kesalahan jaringan atau batas percobaan terlampaui. Silakan coba lagi.');
                 }
             });
         });
@@ -484,6 +494,11 @@ var KTLoginGeneral = function () {
                     }).then(function () {
                         KTUtil.scrollTop();
                     });
+                },
+                error: function () {
+                    // Pulihkan tombol submit bila pengajuan tiket gagal karena galat HTTP (403/429/500)
+                    btn.removeClass('kt-spinner kt-spinner--right kt-spinner--sm kt-spinner--light').attr('disabled', false);
+                    showErrorMsg(form, 'danger', 'Terjadi kesalahan jaringan atau batas percobaan terlampaui. Silakan coba lagi.');
                 }
             });
         });

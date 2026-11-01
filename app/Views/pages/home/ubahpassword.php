@@ -12,26 +12,26 @@
 				<div class="kt-portlet__head">
 					<div class="kt-portlet__head-label">
 						<h3 class="kt-portlet__head-title">
-							<?=strtoupper($judul)?>
+							<?= esc(strtoupper((string) ($judul ?? ''))) ?>
 						</h3>
 					</div>
 				</div>
 
 				<!--begin::Form-->
-				<form class="kt-form" action="<?=$save_url?>" method="post" id="form_change_password">
+				<form class="kt-form" action="<?= esc($save_url ?? '') ?>" method="post" id="form_change_password">
 				    <?= csrf_field() ?>
 					<div class="kt-portlet__body">
 						<div class="form-group">
 							<label>Username</label>
-							<input type="text" class="form-control" name="susrNama" placeholder="Username" aria-describedby="Username" value="<?=$susrNama!=false?$susrNama:''?>" readonly>
+							<input type="text" class="form-control" name="susrNama" placeholder="Username" aria-describedby="Username" value="<?= $susrNama != false ? esc((string) $susrNama, 'attr') : '' ?>" readonly>
 						</div>
 						<div class="form-group">
 							<label>Name</label>
-							<input type="text" class="form-control" name="susrProfil" placeholder="Name" aria-describedby="Name" value="<?=$susrProfil!=false?$susrProfil:''?>" readonly>
+							<input type="text" class="form-control" name="susrProfil" placeholder="Name" aria-describedby="Name" value="<?= $susrProfil != false ? esc((string) $susrProfil, 'attr') : '' ?>" readonly>
 						</div>
 						<div class="form-group">
 							<label>Role</label>
-							<input type="text" class="form-control" name="susrSgroupNama" placeholder="Role" aria-describedby="Role" value="<?=$susrSgroupNama!=false?$susrSgroupNama:''?>" readonly>
+							<input type="text" class="form-control" name="susrSgroupNama" placeholder="Role" aria-describedby="Role" value="<?= $susrSgroupNama != false ? esc((string) $susrSgroupNama, 'attr') : '' ?>" readonly>
 						</div>
 						<div class="form-group">
 							<label>Old Password</label>

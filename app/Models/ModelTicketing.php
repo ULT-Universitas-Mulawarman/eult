@@ -181,17 +181,14 @@ class ModelTicketing extends ModelMaster
         return $baris ?? false;
     }
 
-    private function subDisposisiTerakhir(): string
+    /**
+     * Subquery nomor surat per tiket untuk mencegah query N+1 saat merender tombol aksi tabel.
+     */
+    protected function subSuratRingkas(): string
     {
-        $sub1 = $this->db->table('d_disposisi')
-            ->select('disposisiTicketId mDisp,MAX(disposisiTanggal) mTgl')
-            ->groupBy('disposisiTicketId')
-            ->getCompiledSelect();
-
-        return $this->db->newQuery()
-            ->select('d_disposisi.*')
-            ->from('(' . $sub1 . ') as d')
-            ->join('d_disposisi', 'mDisp = disposisiTicketId AND mTgl = disposisiTanggal')
+        return $this->db->table('r_surat')
+            ->select('suratTrackingId, MAX(suratNomor) AS suratNomor')
+            ->groupBy('suratTrackingId')
             ->getCompiledSelect();
     }
 
@@ -200,11 +197,13 @@ class ModelTicketing extends ModelMaster
      */
     public function dataById(array|string $kondisi = '', string $status = ''): array|false
     {
-        $sub2  = $this->subDisposisiTerakhir();
-        $refDb = $this->dbUltName();
+        $sub2     = $this->subDisposisiTerakhir();
+        $subSurat = $this->subSuratRingkas();
+        $refDb    = $this->dbUltName();
 
         $builder = $this->db->table($this->table)
             ->select($this->table . ".*,{$refDb}.ref_jenis_layanan.*,r_priority.*,r_status.*,sunit.*,d_disposisi.*,
+                    r_surat_ringkas.suratNomor,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
                     ref_layanan.layananNama sCatNama,
@@ -218,6 +217,7 @@ class ModelTicketing extends ModelMaster
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('s_unit sunit', 'ticketAssign = sunit.unitId', 'left')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
+            ->join('(' . $subSurat . ') r_surat_ringkas', 'ticketTrackingId = r_surat_ringkas.suratTrackingId', 'left')
             ->orderBy('disposisiTanggal DESC');
 
         if (! empty($kondisi)) {
@@ -263,6 +263,19 @@ class ModelTicketing extends ModelMaster
         $sub2  = $this->subDisposisiTerakhir();
         $refDb = $this->dbUltName();
 
+        // Subquery arsip hasil akhir (OUTPUT/TTD) terbaru per tiket agar tidak mengambil cetakan lama
+        $subArsipMax = $this->db->table('d_archive')
+            ->select('MAX(archiveId) mArchId')
+            ->whereIn('archiveJenis', ['TTD', 'OUTPUT'])
+            ->groupBy('archiveTrackingId')
+            ->getCompiledSelect();
+
+        $subArsip = $this->db->newQuery()
+            ->select('d_archive.*')
+            ->from('(' . $subArsipMax . ') as am')
+            ->join('d_archive', 'am.mArchId = d_archive.archiveId')
+            ->getCompiledSelect();
+
         $builder = $this->db->table($this->table)
             ->select($this->table . ".*,s_user.*,r_priority.*,r_status.*,a.*,d_rating.*,{$refDb}.ref_jenis_layanan.*,d_disposisi.*,d_archive.*,
                         runit.unitNama runitNama,
@@ -279,7 +292,7 @@ class ModelTicketing extends ModelMaster
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('s_unit a', 'ticketAssign = a.unitId', 'left')
             ->join('d_rating', 'ticketTrackingId=ratingTicketId', 'left')
-            ->join('d_archive', 'archiveTrackingId = ticketTrackingId AND (archiveJenis="TTD" or archiveJenis="OUTPUT")', 'LEFT')
+            ->join('(' . $subArsip . ') d_archive', 'archiveTrackingId = ticketTrackingId', 'LEFT')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left');
 
         // Kondisi string mentah HANYA untuk caller server-side yang terkontrol.
@@ -310,8 +323,13 @@ class ModelTicketing extends ModelMaster
     {
         $refDb = $this->dbUltName();
 
-        $hasil = $this->db->table('d_disposisi')
-            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,d_archive.*,{$refDb}.ref_jenis_layanan.*,
+        $butuhGrupUnit = (is_array($kondisi) && array_key_exists('sgroupunitSgroupNama', $kondisi))
+            || (is_string($kondisi) && stripos($kondisi, 'sgroupunit') !== false);
+
+        $kolomGrup = $butuhGrupUnit ? 's_user_group_unit.*,' : '';
+
+        $builder = $this->db->table('d_disposisi')
+            ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,{$kolomGrup}d_archive.*,{$refDb}.ref_jenis_layanan.*,
                     d_unit.unitNama dunitNama,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
@@ -326,11 +344,18 @@ class ModelTicketing extends ModelMaster
             ->join('r_priority', 'disposisiPriority = priorityId', 'LEFT')
             ->join('r_status', 'disposisiStatus = statusId', 'LEFT')
             ->join('s_unit', 'ticketAssign = s_unit.unitId', 'left')
-            ->join('s_unit d_unit', 'disposisiUnit = d_unit.unitId', 'left')
-            ->join('s_user_group_unit', 'sgroupunitUnitId = disposisiUnit', 'left')
+            ->join('s_unit d_unit', 'disposisiUnit = d_unit.unitId', 'left');
+
+        if ($butuhGrupUnit) {
+            $builder->join('s_user_group_unit', 'sgroupunitUnitId = disposisiUnit', 'left');
+        }
+
+        $hasil = $builder
             ->join('d_archive', 'disposisiArchiveId = archiveId', 'left')
             ->where($kondisi)
-            ->orderBy('disposisiTanggal')
+            ->groupBy(['d_disposisi.disposisiTicketId', 'd_disposisi.disposisiTanggal', 'd_disposisi.disposisiUnit'])
+            ->orderBy('disposisiTanggal', 'ASC')
+            ->orderBy('disposisiUnit', 'ASC')
             ->get()->getResultArray();
 
         return $hasil === [] ? false : $hasil;
@@ -341,11 +366,13 @@ class ModelTicketing extends ModelMaster
      */
     public function disposisiAll(array|string $kondisi, string $status = ''): array|false
     {
-        $sub2  = $this->subDisposisiTerakhir();
-        $refDb = $this->dbUltName();
+        $sub2     = $this->subDisposisiTerakhir();
+        $subSurat = $this->subSuratRingkas();
+        $refDb    = $this->dbUltName();
 
         $builder = $this->db->table('d_ticketing')
             ->select("d_disposisi.*,d_ticketing.*,r_priority.*,r_status.*,s_unit.*,s_user_group_unit.*,{$refDb}.ref_jenis_layanan.*,
+                    r_surat_ringkas.suratNomor,
                     d_unit.unitNama dunitNama,
                     runit.unitNama runitNama,
                     ref_layanan.layananId sCatId,
@@ -358,6 +385,7 @@ class ModelTicketing extends ModelMaster
             ->join("{$refDb}.ref_unit runit", 'layananunitId = runit.unitId', 'LEFT')
             ->join('s_unit', 'ticketAssign = s_unit.unitId', 'left')
             ->join('(' . $sub2 . ') d_disposisi', 'ticketTrackingId = disposisiTicketId', 'left')
+            ->join('(' . $subSurat . ') r_surat_ringkas', 'ticketTrackingId = r_surat_ringkas.suratTrackingId', 'left')
             ->join('r_priority', 'ticketPriority = priorityId', 'LEFT')
             ->join('r_status', 'ticketStatus = statusId', 'LEFT')
             ->join('s_user_group_unit', 'sgroupunitUnitId = disposisiUnit', 'left')

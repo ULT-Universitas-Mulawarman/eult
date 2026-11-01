@@ -93,7 +93,7 @@ abstract class BaseController extends \CodeIgniter\Controller
 
         $data['notiftiket'] = $isAdminOperator
             ? $this->modelMaster->dataNotif('repliesRead = 0')
-            : $this->modelMaster->disposisiNotif('`repliesRead` = 0 AND `sgroupunitSgroupNama` = ' . $this->modelMaster->dbAktif()->escape($namaGrup));
+            : $this->modelMaster->disposisiNotif('(`repliesRead` = 0 OR (`repliesTicketId` IS NULL AND `ticketStatus` = 3)) AND `sgroupunitSgroupNama` = ' . $this->modelMaster->dbAktif()->escape($namaGrup));
 
         $data['detail_url'] = site_url('ticketing/detail') . '/';
 

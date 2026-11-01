@@ -63,7 +63,9 @@ class Pengguna extends BaseController
         $data['r_category']   = $this->pengguna->tabelRef('r_category');
         $data['save_url']     = site_url($this->controllerName . '/save') . '/';
         $data['status_page']  = 'Update';
-        $data['datas']        = $this->pengguna->byId(['susrNama' => $terbuka]);
+        $data['datas']        = (is_string($terbuka) && $terbuka !== '')
+            ? $this->pengguna->byId(['susrNama' => $terbuka])
+            : false;
         $data['s_user_group'] = $this->pengguna->tabelRef('s_user_group');
 
         return view($this->template, $data);
@@ -83,23 +85,65 @@ class Pengguna extends BaseController
             eult_message_kirim('Ooops!! Something Wrong!!', 'error');
         }
 
-        $nama     = (string) $this->request->getPost('susrNama');
-        $grup     = (string) $this->request->getPost('susrSgroupNama');
-        $param    = [
+        $nama  = (string) $this->request->getPost('susrNama');
+        $grup  = (string) $this->request->getPost('susrSgroupNama');
+        $katId = trim((string) $this->request->getPost('susrCategoryId'));
+
+        // Cegah tabrakan nama pengguna ke akun lain saat melakukan perubahan username
+        if ($namaLama !== '' && $nama !== $namaLama && $this->pengguna->byId(['susrNama' => $nama]) !== false) {
+            eult_message_kirim('Username sudah digunakan oleh pengguna lain.', 'error');
+        }
+
+        $param = [
             'susrNama'       => $nama,
             'susrSgroupNama' => $grup,
             'susrProfil'     => (string) $this->request->getPost('susrProfil'),
-            'susrCategoryId' => (string) $this->request->getPost('susrCategoryId'),
+            'susrCategoryId' => $katId === '' ? null : (int) $katId,
         ];
 
+        $db = $this->pengguna->dbAktif();
+
         if ($namaLama === '') {
+            // Setel hash password awal dan waktu login awal untuk akun baru
+            $param['susrPassword']  = password_hash(eult_generate_password(), PASSWORD_BCRYPT);
+            $param['susrLastLogin'] = date('Y-m-d H:i:s');
+
+            $db->transStart();
             $proses = $this->pengguna->tambah('s_user', $param)
                 && $this->pengguna->tambah('s_user_group_user', ['sgroupSusrNama' => $nama, 'sgroupSgroupNama' => $grup]);
+            $db->transComplete();
         } else {
-            $proses = $this->pengguna->ubah('s_user', $param, ['susrNama' => $namaLama]);
+            $dataLama       = $this->pengguna->byId(['susrNama' => $namaLama]);
+            $grupUtamaLama  = is_array($dataLama) ? (string) ($dataLama['susrSgroupNama'] ?? '') : '';
+            $keanggotaanLama = $this->pengguna->tabelRef('s_user_group_user', ['sgroupSusrNama' => $namaLama]);
+            $daftarGrupBaru = [$grup];
+
+            if (is_array($keanggotaanLama)) {
+                foreach ($keanggotaanLama as $barisGrup) {
+                    $namaGrupLama = (string) ($barisGrup['sgroupSgroupNama'] ?? '');
+                    if ($namaGrupLama !== '' && $namaGrupLama !== $grupUtamaLama && ! in_array($namaGrupLama, $daftarGrupBaru, true)) {
+                        $daftarGrupBaru[] = $namaGrupLama;
+                    }
+                }
+            }
+
+            // Sinkronkan s_user dan s_user_group_user dalam satu transaksi atomik
+            $db->transStart();
+            $proses = $this->pengguna->hapus('s_user_group_user', ['sgroupSusrNama' => $namaLama])
+                && $this->pengguna->ubah('s_user', $param, ['susrNama' => $namaLama]);
+
+            if ($proses) {
+                foreach ($daftarGrupBaru as $itemGrup) {
+                    if (! $this->pengguna->tambah('s_user_group_user', ['sgroupSusrNama' => $nama, 'sgroupSgroupNama' => $itemGrup])) {
+                        $proses = false;
+                        break;
+                    }
+                }
+            }
+            $db->transComplete();
         }
 
-        if (! empty($proses)) {
+        if ($db->transStatus() && ! empty($proses)) {
             eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');
         }
 
@@ -114,6 +158,12 @@ class Pengguna extends BaseController
 
         if (! is_string($terbuka) || $terbuka === '') {
             eult_message_kirim('Kunci pengguna tidak valid.', 'error');
+        }
+
+        // Tolak penghapusan akun milik pengguna yang sedang aktif login
+        $akunAktif = (string) (($this->sesiLogin() ?? [])['susrNama'] ?? '');
+        if ($akunAktif !== '' && $terbuka === $akunAktif) {
+            eult_message_kirim('Anda tidak dapat menghapus akun yang sedang digunakan.', 'error');
         }
 
         if ($this->pengguna->byId(['susrNama' => $terbuka]) === false) {

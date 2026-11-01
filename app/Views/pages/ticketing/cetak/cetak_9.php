@@ -139,6 +139,14 @@
 				</table>
 			</div>
 		<div class="mb-20"></div>
+		<?php
+		$isObjMhs    = is_object($mahasiswa ?? false);
+		$namaMhs     = $isObjMhs ? (string) ($mahasiswa->name ?? ($mahasiswa->peserta_didik->nama ?? '')) : '';
+		$nimMhs      = $isObjMhs ? (string) ($mahasiswa->nim ?? '') : '';
+		$fakultasMhs = $isObjMhs ? (string) ($mahasiswa->faculty_name ?? ($mahasiswa->program_studi->nama_fakultas ?? '')) : '';
+		$prodiMhs    = $isObjMhs ? (string) ($mahasiswa->departement_name ?? ($mahasiswa->program_studi->nama_prodi ?? ($mahasiswa->program_studi->nama ?? ''))) : '';
+		$jenjangMhs  = $isObjMhs ? (string) ($mahasiswa->degree ?? ($mahasiswa->program_studi->jenjang ?? ($mahasiswa->program_studi->jenjang_didik->nama ?? ''))) : '';
+		?>
 		<div class="paragraf">
 			Dengan ini memberikan dispensasi kepada mahasiswa berikut :
 			<div class="elem-center ">
@@ -146,40 +154,46 @@
 					<tr>
 						<td style="width:4.5cm">Nama</td>
 						<td style="width:10px">:</td>
-						<td class="bold uppercase"><?= $mahasiswa != false ? $mahasiswa->name : '' ?></td>
+						<td class="bold uppercase"><?= $namaMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">NIM</td>
 						<td style="width:10px">:</td>
-						<td><?= $mahasiswa != false ? $mahasiswa->nim : '' ?></td>
+						<td><?= $nimMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Fakultas</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->faculty_name : '' ?></td>
+						<td class="capitalize"><?= $fakultasMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Program Studi</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->departement_name : '' ?></td>
+						<td class="capitalize"><?= $prodiMhs ?></td>
 					</tr>
 					<tr>
 						<td style="width:4.5cm">Jenjang Studi</td>
 						<td style="width:10px">:</td>
-						<td class="capitalize"><?= $mahasiswa != false ? $mahasiswa->degree : '' ?></td>
+						<td class="capitalize"><?= $jenjangMhs ?></td>
 					</tr>
 				</table>
 			</div>
 			<?= $datas != FALSE ? (!empty($datas['suratBody']) ? $datas['suratBody'] : $isiSurat) : '' ?>
 			<?php if (!empty($datas['ticketValidated'])) : ?>
 				<div style="margin-left: 8cm">
-					<p style="margin-bottom: 0px">a.n Rektor <br> <?= $datas['suratPejabatJabatan'] ?></p>
+					<p style="margin-bottom: 0px">a.n Rektor <br> <?= $datas['suratPejabatJabatan'] ?? '' ?></p>
 					<?php
-					if (file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $datas['ticketTrackingId'] . '.png')) :
+					if (!empty($datas['ticketTrackingId']) && file_exists(WRITEPATH . 'uploads/qrcode/TTD_' . $datas['ticketTrackingId'] . '.png')) :
 						?>
 						<img width="100" src="<?= WRITEPATH ?>uploads/qrcode/TTD_<?= $datas['ticketTrackingId'] ?>.png" alt="">
 					<?php endif; ?>
-					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNama'] ?> </span><br> NIP. <?= $datas['suratPejabatNIP'] ?></p>
+					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNama'] ?? '' ?> </span><br> NIP. <?= $datas['suratPejabatNIP'] ?? '' ?></p>
+				</div>
+			<?php elseif ($datas != FALSE) : ?>
+				<div style="margin-left: 8cm">
+					<p style="margin-bottom: 0px"><?= empty($datas['suratPejabatJabatanAnDraft']) ? 'a.n Rektor' : 'a.n ' . $datas['suratPejabatJabatanAnDraft'] ?> <br> <?= $datas['suratPejabatJabatanDraft'] ?? '' ?></p>
+					<br><br><br><br>
+					<p style="margin-top: 0px"><span class="bold"><?= $datas['suratPejabatNamaDraft'] ?? '' ?> </span><br> NIP. <?= $datas['suratPejabatNIPDraft'] ?? '' ?></p>
 				</div>
 			<?php endif ?>
 		</div>

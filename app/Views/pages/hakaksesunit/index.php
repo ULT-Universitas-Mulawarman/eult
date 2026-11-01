@@ -50,8 +50,14 @@
                                         <option value="">-- Pilih Grup Pengguna / Role --</option>
                                         <?php if (!empty($s_user_group)): ?>
                                             <?php foreach ($s_user_group as $row): ?>
-                                                <option value="<?= esc($row['sgroupNama']) ?>|<?= esc($row['sgroupUnit'] ?? '') ?>">
-                                                    <?= esc($row['sgroupNama']) ?> - <?= esc($row['sgroupKeterangan']) ?>
+                                                <?php
+                                                // Tampilkan ringkasan unit terpetakan bila ada, tanpa menyisakan pemisah pipa kosong
+                                                $kodeFilterUnit = trim((string) ($row['sgroupUnit'] ?? ''));
+                                                $nilaiOpsi      = $kodeFilterUnit !== '' ? $row['sgroupNama'] . '|' . $kodeFilterUnit : $row['sgroupNama'];
+                                                $infoUnit       = trim((string) ($row['unitTerpetakan'] ?? ''));
+                                                ?>
+                                                <option value="<?= esc($nilaiOpsi) ?>">
+                                                    <?= esc($row['sgroupNama']) ?> - <?= esc($row['sgroupKeterangan']) ?><?= $infoUnit !== '' ? ' (' . esc($infoUnit) . ')' : '' ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         <?php endif; ?>

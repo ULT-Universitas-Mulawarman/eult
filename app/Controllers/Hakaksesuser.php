@@ -19,7 +19,7 @@ class Hakaksesuser extends BaseController
     {
         $data            = $this->getMaster($this->pathPage . $this->pageIndex);
         $data['scripts'] = [];
-        $data['datas']   = $this->modelMaster->tabelRef('s_user_group');
+        $data['datas']   = $this->modelMaster->daftarGrupDenganUnit();
 
         return view($this->template, $data);
     }

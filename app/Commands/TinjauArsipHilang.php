@@ -76,7 +76,8 @@ class TinjauArsipHilang extends BaseCommand
             . ($total > 0 ? sprintf(' (%.1f%%)', $tanpaArsip / $total * 100) : ''));
         CLI::newLine();
 
-        $kandidat = $this->kandidatHapus($db, $semua ? 0 : 20, $sejak);
+        // Saat --hapus aktif (atau --semua), ambil seluruh kandidat agar tidak terpotong di 20 baris
+        $kandidat = $this->kandidatHapus($db, ($semua || $hapus) ? 0 : 20, $sejak);
 
         CLI::write('Kandidat hapus (tanpa arsip, balasan, disposisi, riwayat): ' . count($kandidat), 'yellow');
         CLI::newLine();
@@ -87,7 +88,7 @@ class TinjauArsipHilang extends BaseCommand
             return;
         }
 
-        $this->cetakTabel($kandidat);
+        $this->cetakTabel($semua ? $kandidat : array_slice($kandidat, 0, 20));
 
         if ($csv !== null) {
             $this->eksporCsv($db, $csv, $sejak);

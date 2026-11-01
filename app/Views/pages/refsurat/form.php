@@ -14,20 +14,20 @@
                             <div class="kt-portlet__head">
                                 <div class="kt-portlet__head-label">
                                     <h3 class="kt-portlet__head-title">
-                                        <?=strtoupper($page_judul)?>
+                                        <?= esc(strtoupper((string) ($page_judul ?? ''))) ?>
                                     </h3>
                                 </div>
                             </div>
 
                             <!--begin::Form-->
-                            <form class="kt-form" action="<?=$save_url?>" method="post" id="form_form">
+                            <form class="kt-form" action="<?= esc($save_url ?? '') ?>" method="post" id="form_form">
                                 <?= csrf_field() ?>
                                 <div class="kt-portlet__body">
-                                    <input type="hidden" name="categoryIdOld" value="<?=$datas!=false?$datas['categoryId']:''?>">
+                                    <input type="hidden" name="categoryIdOld" value="<?= $datas != false ? esc((string) ($datas['categoryId'] ?? ''), 'attr') : '' ?>">
                                     
                                 <div class="form-group">
                                     <label>categoryNama</label>
-                                    <input type="text" class="form-control" name="categoryNama" placeholder="categoryNama" aria-describedby="categoryNama" value="<?=$datas!=false?$datas['categoryNama']:''?>">
+                                    <input type="text" class="form-control" name="categoryNama" placeholder="categoryNama" aria-describedby="categoryNama" value="<?= $datas != false ? esc((string) ($datas['categoryNama'] ?? ''), 'attr') : '' ?>">
                                 </div>
                             
                                 </div>

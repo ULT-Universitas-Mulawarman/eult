@@ -62,13 +62,26 @@ class Hakaksespengguna extends BaseController
             eult_message_kirim('Pilih minimal 1 grup untuk hak akses pengguna ini.', 'error');
         }
 
-        $this->matriks->hapus('s_user_group_user', ['sgroupSusrNama' => $nama]);
+        // Bungkus penghapusan dan penyisipan ulang grup pengguna dalam satu transaksi
+        $db = $this->matriks->dbAktif();
+        $db->transStart();
+        $berhasil = $this->matriks->hapus('s_user_group_user', ['sgroupSusrNama' => $nama]);
 
-        foreach ($dipilih as $modul) {
-            $this->matriks->tambah('s_user_group_user', [
-                'sgroupSusrNama'   => $nama,
-                'sgroupSgroupNama' => $modul,
-            ]);
+        if ($berhasil) {
+            foreach ($dipilih as $modul) {
+                if (! $this->matriks->tambah('s_user_group_user', [
+                    'sgroupSusrNama'   => $nama,
+                    'sgroupSgroupNama' => $modul,
+                ])) {
+                    $berhasil = false;
+                    break;
+                }
+            }
+        }
+        $db->transComplete();
+
+        if (! $db->transStatus() || ! $berhasil) {
+            eult_message_kirim($this->judul . ' Gagal Disimpan', 'error');
         }
 
         eult_message_kirim($this->judul . ' Berhasil Disimpan', 'success');

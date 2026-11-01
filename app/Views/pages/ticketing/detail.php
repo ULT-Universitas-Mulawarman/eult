@@ -481,7 +481,10 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                                 <button type="submit" class="btn btn-brand btn-sm font-weight-bold kt-chat__reply">
                                     <i class="la la-paper-plane mr-1"></i> Kirim Tanggapan
                                 </button>
-                                <?php if (!empty($encKey) && $userGroupName !== 'USER'): ?>
+                                <?php
+                                $statusSaatIni = (int) ($ticketStatus ?? ($datas['ticketStatus'] ?? 0));
+                                ?>
+                                <?php if (!empty($encKey) && $userGroupName !== 'USER' && !in_array($statusSaatIni, [5, 8], true)): ?>
                                     <a href="<?= site_url('ticketing/terima/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-terima" id="btn-verifikasi-cepat" title="Verifikasi berkas persyaratan">
                                         <i class="la la-check text-success mr-1"></i> Verifikasi Berkas
                                     </a>
@@ -612,6 +615,26 @@ document.addEventListener('DOMContentLoaded', function () {
                 success: function (data) {
                     if (typeof KTApp !== 'undefined' && KTApp.unblockPage) {
                         KTApp.unblockPage();
+                    }
+                    // Periksa status payload JSON agar respons galat HTTP 200 tidak dianggap sukses
+                    var res = null;
+                    try {
+                        res = (typeof data === 'string' ? JSON.parse(data) : data);
+                    } catch (err) {
+                        res = null;
+                    }
+                    if (!res || res.status === 'error') {
+                        var pesanGalat = (res && res.message) ? res.message : 'Gagal memverifikasi berkas tiket. Silakan coba kembali.';
+                        if (typeof swal !== 'undefined' && swal.fire) {
+                            swal.fire({
+                                title: 'Gagal Verifikasi',
+                                text: pesanGalat,
+                                type: 'error'
+                            });
+                        } else {
+                            alert('Gagal verifikasi: ' + pesanGalat);
+                        }
+                        return;
                     }
                     if (typeof swal !== 'undefined' && swal.fire) {
                         swal.fire({

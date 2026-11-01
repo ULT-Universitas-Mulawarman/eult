@@ -37,6 +37,22 @@
         }
     };
 
+    // Pesan dari server (JSON {status, message}) lebih tepat daripada teks
+    // generik: HTTP 403 bisa berarti token CSRF basi ATAU akses tiket
+    // ditolak (Ticketing::bolehAksesTiket), dan keduanya dulu ditampilkan
+    // sebagai "Sesi Berakhir" — menyesatkan operator.
+    var pesanServer = function (xhr) {
+        try {
+            var data = JSON.parse(xhr.responseText);
+            if (data && typeof data.message === 'string' && data.message) {
+                return data.message;
+            }
+        } catch (e) {
+            // Body bukan JSON (mis. halaman HTML error) — pakai teks generik.
+        }
+        return '';
+    };
+
     // Handler error default untuk semua AJAX jQuery yang tidak punya
     // callback error sendiri — sebelumnya kegagalan jaringan/server total
     // tak terlihat (tombol "Sedang Menyimpan" menggantung tanpa notifikasi).
@@ -49,9 +65,14 @@
             }
             if (xhr && (xhr.status === 403 || xhr.status === 419)) {
                 swal.fire({
-                    title: 'Sesi Berakhir',
-                    text: 'Sesi Anda telah berakhir atau token keamanan kedaluwarsa. Silakan muat ulang halaman dan masuk kembali.',
-                    type: 'warning'
+                    title: 'Permintaan Ditolak',
+                    text: pesanServer(xhr) || 'Sesi atau token keamanan Anda sudah kedaluwarsa. Muat ulang halaman lalu coba lagi.',
+                    type: 'warning',
+                    confirmButtonText: 'Muat Ulang Halaman'
+                }).then(function (hasil) {
+                    if (hasil.value) {
+                        window.location.reload();
+                    }
                 });
                 return;
             }

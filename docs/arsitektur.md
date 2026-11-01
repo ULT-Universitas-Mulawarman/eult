@@ -62,3 +62,37 @@ tertinggi tetap butuh UNIQUE KEY pada `d_ticketing.ticketTrackingId`
   **Database**/**Live** butuh MySQL `db_newtiket`/`db_ultunmul` aktif.
 - `phpunit.xml` lokal (tidak di-track) menimpa dist — pastikan suite
   `Unit` tetap didefinisikan di sana (lihat komentar dalam file).
+
+## CSRF: Tanpa Rotasi, Umur Cookie = Umur Sesi
+
+`Config\Security::$regenerate = false` dan `$expires = 28800` — **sengaja
+berbeda dari default CI4** (`true` / `7200`).
+
+Alasannya operasional, bukan sekadar preferensi. Dengan `$regenerate =
+true`, setiap POST yang lolos verifikasi mengganti hash di cookie
+`csrf_cookie_name`, sedangkan cookie itu dipakai bersama **seluruh tab**
+pada domain yang sama. Token yang tertanam di sebuah halaman hanya
+diperbarui pada tab yang melakukan request (`CsrfTokenHeader` +
+`public/assets/js/pages/eult-csrf.js`). Akibatnya alur kerja operator yang
+wajar — buka daftar tiket, buka detail di tab baru, verifikasi berkas di
+sana, kembali ke tab daftar, klik centang hijau — berakhir HTTP 403 dan
+dialog "Sesi Berakhir" padahal sesi masih hidup (laporan operator
+2026-11-01).
+
+Muat ulang halaman "menyembuhkan" gejala itu karena token dibaca ulang
+dari cookie — itulah sebabnya workaround "refresh lalu tampilkan data
+lagi" dilaporkan berhasil.
+
+Yang perlu diketahui saat mengubah konfigurasi ini:
+
+- `$tokenRandomize` tetap `true`, jadi setiap output token di-mask
+  (mitigasi BREACH) dan hash mentah tidak pernah dikirim ke browser.
+- Cookie CSRF hanya ditulis saat hash pertama kali dibuat, jadi umurnya
+  dihitung dari kunjungan pertama — bukan diperpanjang tiap request.
+  Setelah `$expires` habis, POST berikutnya ditolak 403 dan halaman perlu
+  dimuat ulang. Nilai 28800 menyamakannya dengan `Config\Session::$expiration`.
+- Penolakan HTTP 403 kini menampilkan pesan dari server bila ada, sehingga
+  penolakan otorisasi tiket (`Ticketing::bolehAksesTiket()` →
+  "Anda tidak berhak mengakses tiket ini.") tidak lagi disalahartikan
+  sebagai sesi berakhir.
+- Regresi dikunci oleh `tests/unit/CsrfTokenStabilTest.php`.

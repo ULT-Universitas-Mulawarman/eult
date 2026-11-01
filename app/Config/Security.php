@@ -60,9 +60,13 @@ class Security extends BaseConfig
      *
      * Expiration time for Cross Site Request Forgery protection cookie.
      *
-     * Defaults to two hours (in seconds).
+     * Disamakan dengan umur sesi (Config\Session::$expiration = 8 jam) agar
+     * token tidak kedaluwarsa lebih cepat daripada sesi yang dilindunginya.
+     * Laporan operator 2026-11-01: meninggalkan aplikasi 30-60 menit untuk
+     * memeriksa aplikasi lain lalu kembali menyelesaikan tiket harus tetap
+     * berhasil tanpa dialog "Sesi Berakhir".
      */
-    public int $expires = 7200;
+    public int $expires = 28800;
 
     /**
      * --------------------------------------------------------------------------
@@ -70,8 +74,26 @@ class Security extends BaseConfig
      * --------------------------------------------------------------------------
      *
      * Regenerate CSRF Token on every submission.
+     *
+     * DINONAKTIFKAN untuk E-ULT (laporan operator 2026-11-01).
+     *
+     * Rotasi per-POST mengganti hash di cookie `csrf_cookie_name`, sedangkan
+     * cookie itu dipakai bersama SEMUA tab pada domain yang sama. Token yang
+     * tertanam di sebuah halaman hanya diperbarui pada tab yang melakukan
+     * request (lihat public/assets/js/pages/eult-csrf.js), sehingga:
+     *
+     *   - operator membuka detail tiket di tab baru, melakukan satu aksi di
+     *     sana, lalu kembali ke tab daftar → token tab daftar sudah basi;
+     *   - klik centang hijau untuk menyelesaikan tiket ditolak HTTP 403 dan
+     *     eult-csrf.js menampilkan dialog "Sesi Berakhir" padahal sesi masih
+     *     hidup (muat ulang halaman "menyembuhkan" gejalanya).
+     *
+     * Dengan `false`, satu hash berlaku selama cookie CSRF hidup sehingga
+     * multi-tab dan submit berurutan tetap sah. `$tokenRandomize` tetap
+     * `true`, jadi setiap output token tetap di-mask (mitigasi BREACH) dan
+     * token mentah tidak pernah dikirim ke browser.
      */
-    public bool $regenerate = true;
+    public bool $regenerate = false;
 
     /**
      * --------------------------------------------------------------------------

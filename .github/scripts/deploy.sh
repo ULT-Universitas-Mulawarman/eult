@@ -84,8 +84,10 @@ tar -czf "$ARCHIVE" --exclude='./writable' --exclude='./.git' -C "$TARGET" . \
 ls -1t "$BACKUP_DIR"/eult-*.tar.gz 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | xargs -r rm -f
 
 ROLLBACK_NEEDED=1
+GIT_SAFE_CFG=""
 rollback() {
     local code=$?
+    [ -n "${GIT_SAFE_CFG:-}" ] && rm -f "$GIT_SAFE_CFG"
     if [ "$ROLLBACK_NEEDED" -eq 1 ] && [ -f "$ARCHIVE" ]; then
         warn "Deploy gagal (exit $code) — mengembalikan kode dari $ARCHIVE"
         if tar -xzf "$ARCHIVE" -C "$TARGET"; then
@@ -158,8 +160,8 @@ rm -f /tmp/eult-rsync.log
 # Aman: .env, writable/, dan vendor/ di-gitignore sehingga tidak pernah
 # dilaporkan sebagai perubahan. Kegagalan di sini hanya diperingatkan.
 # Pastikan struktur writable/ lengkap (dibuat bila belum ada, tidak dihapus)
-# serta pulihkan berkas pelindung yang di-track Git (index.html, .htaccess)
-# sebelum menyamakan metadata Git agar `git status` tidak melaporkan file hilang.
+# serta segarkan berkas pelindung yang di-track Git (index.html, .htaccess)
+# beserta mode izinnya sebelum menyamakan metadata Git.
 for d in cache logs session uploads debugbar; do
     mkdir -p "$TARGET/writable/$d"
 done
@@ -171,22 +173,26 @@ for pelindung in \
     writable/session/index.html \
     writable/uploads/index.html \
     writable/debugbar/index.html; do
-    if [ -f "$SOURCE/$pelindung" ] && [ ! -f "$TARGET/$pelindung" ]; then
-        cp -p "$SOURCE/$pelindung" "$TARGET/$pelindung"
+    if [ -f "$SOURCE/$pelindung" ]; then
+        cp -fp "$SOURCE/$pelindung" "$TARGET/$pelindung"
     fi
 done
 
-# Wrapper git yang mendaftarkan $SOURCE dan $TARGET sebagai safe.directory
-# lewat environment GIT_CONFIG_* (diwariskan juga ke subproses git-upload-pack
-# saat `git fetch`), sehingga tidak gagal oleh "dubious ownership" bila runner
-# dijalankan sebagai user berbeda (mis. root vs eultunmul).
+# Pulihkan kepemilikan working tree sebelum reset --mixed agar stat cache
+# pada .git/index langsung cocok dengan UID/GID user aplikasi.
+pulihkan_kepemilikan_target
+
+# Gunakan berkas GIT_CONFIG_GLOBAL sementara berisi safe.directory = * selama
+# sinkronisasi metadata Git. Berbeda dari GIT_CONFIG_COUNT / `-c` yang dihapus
+# oleh Git (`local_repo_env`) saat `git fetch` men-spawn `git-upload-pack` pada
+# path lokal, GIT_CONFIG_GLOBAL tetap diwariskan ke seluruh subproses Git dalam
+# scope `global` (protected configuration) tanpa mengubah ~/.gitconfig sistem.
+GIT_SAFE_CFG="$(mktemp "${TMPDIR:-/tmp}/eult-gitconfig.XXXXXX")"
+chmod 600 "$GIT_SAFE_CFG"
+printf '[safe]\n\tdirectory = *\n' > "$GIT_SAFE_CFG"
+
 git_aman() {
-    GIT_CONFIG_COUNT=2 \
-    GIT_CONFIG_KEY_0=safe.directory \
-    GIT_CONFIG_VALUE_0="$SOURCE" \
-    GIT_CONFIG_KEY_1=safe.directory \
-    GIT_CONFIG_VALUE_1="$TARGET" \
-    git "$@"
+    GIT_CONFIG_GLOBAL="$GIT_SAFE_CFG" git "$@"
 }
 
 sync_git_metadata() {
@@ -253,6 +259,8 @@ sync_git_metadata() {
     fi
 }
 sync_git_metadata
+rm -f "$GIT_SAFE_CFG"
+GIT_SAFE_CFG=""
 pulihkan_kepemilikan_target
 
 # ------------------------------------------------------- migrasi & cache -----

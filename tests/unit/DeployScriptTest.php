@@ -132,8 +132,10 @@ final class DeployScriptTest extends CIUnitTestCase
 
         // Simulasikan kondisi kotor di produksi:
         // 1) Berkas pelindung writable/cache/index.html hilang
-        // 2) HEAD produksi sempat detached pada commit lama
+        // 2) Berkas pelindung writable/logs/index.html terkena chmod 0777 (fileMode kotor)
+        // 3) HEAD produksi sempat detached pada commit lama
         unlink($target . '/writable/cache/index.html');
+        chmod($target . '/writable/logs/index.html', 0777);
         $this->jalankan('git checkout --detach ' . escapeshellarg($shaAwal), $target);
 
         // Tambahkan commit baru di source + vendor hasil build produksi
@@ -146,32 +148,48 @@ final class DeployScriptTest extends CIUnitTestCase
         mkdir($source . '/vendor/autoload', 0775, true);
         file_put_contents($source . '/vendor/autoload.php', "<?php // autoload\n");
 
-        // Buat wrapper git yang mensimulasikan penolakan Git 2.35+ "dubious ownership"
-        // kecuali safe.directory disetel secara eksplisit lewat GIT_CONFIG_* atau -c safe.directory=...
-        $gitAsli = trim($this->jalankan('command -v git')['stdout']);
+        // Buat overlay GIT_EXEC_PATH agar subproses `git-upload-pack` yang di-spawn
+        // oleh `git fetch <local-path>` (setelah Git menghapus local_repo_env seperti
+        // GIT_CONFIG_COUNT dan GIT_CONFIG_PARAMETERS) juga ikut diverifikasi nyata.
+        $gitAsli     = trim($this->jalankan('command -v git')['stdout']);
+        $gitExecAsli = trim($this->jalankan(escapeshellarg($gitAsli) . ' --exec-path')['stdout']);
+        $execOverlay = $this->dirUji . '/git-exec';
+        mkdir($execOverlay, 0775, true);
+
+        foreach (scandir($gitExecAsli) ?: [] as $perkakas) {
+            if ($perkakas === '.' || $perkakas === '..' || $perkakas === 'git-upload-pack') {
+                continue;
+            }
+            symlink($gitExecAsli . '/' . $perkakas, $execOverlay . '/' . $perkakas);
+        }
+
+        $wrapperUploadPack = <<<BASH
+#!/usr/bin/env bash
+daftar_aman="\$("$gitAsli" config --get-all safe.directory 2>/dev/null || true)"
+if [[ "\$daftar_aman" != *"*"* ]]; then
+    echo "fatal: detected dubious ownership in repository at '\${1:-}/.git'" >&2
+    exit 128
+fi
+exec "$gitExecAsli/git-upload-pack" "\$@"
+BASH;
+        file_put_contents($execOverlay . '/git-upload-pack', $wrapperUploadPack);
+        chmod($execOverlay . '/git-upload-pack', 0755);
+
+        // Buat wrapper git utama yang menolak akses bila safe.directory belum disetel,
+        // serta mengarahkan GIT_EXEC_PATH ke overlay di atas saat mengeksekusi git asli.
         $wrapperGit = <<<BASH
 #!/usr/bin/env bash
-izinkan=0
-if [[ "\${GIT_CONFIG_PARAMETERS:-}" == *"safe.directory"* ]]; then
-    izinkan=1
-fi
-if [[ -n "\${GIT_CONFIG_COUNT:-}" ]]; then
-    for ((i=0; i<GIT_CONFIG_COUNT; i++)); do
-        k="GIT_CONFIG_KEY_\$i"
-        if [[ "\${!k:-}" == "safe.directory" ]]; then
-            izinkan=1
-        fi
-    done
-fi
+daftar_aman="\$("$gitAsli" config --get-all safe.directory 2>/dev/null || true)"
 for arg in "\$@"; do
     if [[ "\$arg" == *"safe.directory="* ]]; then
-        izinkan=1
+        daftar_aman="*"
     fi
 done
-if [[ "\$izinkan" -eq 0 ]]; then
+if [[ -z "\$daftar_aman" ]]; then
     echo "fatal: detected dubious ownership in repository" >&2
     exit 128
 fi
+export GIT_EXEC_PATH="$execOverlay"
 exec "$gitAsli" "\$@"
 BASH;
         file_put_contents($bin . '/git', $wrapperGit);
@@ -189,6 +207,7 @@ BASH;
             $source,
             [
                 'PATH'                   => $bin . ':' . $pathLama,
+                'TMPDIR'                 => $this->dirUji,
                 'GITHUB_WORKSPACE'       => $source,
                 'DEPLOY_PATH'            => $target,
                 'DEPLOY_BACKUP_DIR'      => $backup,
@@ -202,9 +221,19 @@ BASH;
 
         self::assertSame(0, $hasil['code'], 'deploy.sh harus keluar dengan kode 0. Log: ' . $gabunganLog);
         self::assertStringNotContainsString(
-            'Sumber bukan repo git; metadata git produksi dilewati',
+            'dubious ownership',
             $gabunganLog,
-            'sync_git_metadata tidak boleh gagal akibat dubious ownership.'
+            'sync_git_metadata maupun subproses git-upload-pack tidak boleh gagal akibat dubious ownership.'
+        );
+        self::assertStringContainsString(
+            'Git produksi disinkronkan ke ' . substr($shaBaru, 0, 7) . ' (main)',
+            $gabunganLog,
+            'Log deploy wajib mengonfirmasi sinkronisasi commit Git produksi.'
+        );
+        self::assertStringContainsString(
+            'Status git produksi bersih (working tree clean)',
+            $gabunganLog,
+            'Log deploy wajib mengonfirmasi working tree Git produksi bersih.'
         );
 
         // Pastikan HEAD, branch main, dan origin/main di target semuanya menunjuk ke commit terbaru
@@ -217,7 +246,13 @@ BASH;
         self::assertSame('main', $branchTarget, 'HEAD produksi tidak boleh tetap detached.');
         self::assertSame($shaBaru, $originTarget, 'refs/remotes/origin/main produksi harus ikut disamakan.');
         self::assertFileExists($target . '/writable/cache/index.html', 'Berkas pelindung writable yang hilang harus dipulihkan.');
+        self::assertSame(
+            0,
+            (int) fileperms($target . '/writable/logs/index.html') & 0111,
+            'Mode izin berkas pelindung writable harus dipulihkan tanpa bit executable kotor.'
+        );
         self::assertFileExists($target . '/writable/logs/log-runtime.log', 'Berkas log runtime produksi tidak boleh terhapus.');
+        self::assertSame([], glob($this->dirUji . '/eult-gitconfig.*') ?: [], 'Berkas konfigurasi Git sementara wajib dibersihkan setelah deploy.');
         self::assertSame('', $statusTarget, 'git status --porcelain di direktori produksi harus bersih total.');
     }
 
@@ -236,9 +271,14 @@ BASH;
             'rsync pada deploy.sh wajib menyertakan --no-group agar tidak memaksa GID root ke produksi.'
         );
         self::assertStringContainsString(
-            'safe.directory',
+            'GIT_CONFIG_GLOBAL',
             $isi,
-            'deploy.sh wajib menyetel safe.directory untuk mencegah kegagalan dubious ownership.'
+            'deploy.sh wajib memakai GIT_CONFIG_GLOBAL agar safe.directory tetap diwariskan ke subproses git-upload-pack.'
+        );
+        self::assertStringContainsString(
+            'directory = *',
+            $isi,
+            'Berkas konfigurasi Git sementara wajib mengizinkan safe.directory = * selama sinkronisasi.'
         );
     }
 }

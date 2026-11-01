@@ -30,8 +30,10 @@ final class CsrfTokenStabilTest extends CIUnitTestCase
     use FeatureTestTrait;
 
     /**
-     * Rute publik yang dilindungi filter `csrf` global dan tidak menyentuh
-     * data bila nomor tiketnya tidak ada.
+     * Rute publik yang dilindungi filter `csrf` global. Payload sengaja
+     * KOSONG: `Login::cektiket()` berhenti di validasi `nomorTiket`
+     * required dan mengembalikan JSON tanpa menyentuh database, sehingga
+     * test ini tetap berjalan di CI yang tidak punya MySQL.
      */
     private const RUTE = 'login/cektiket';
 
@@ -43,7 +45,7 @@ final class CsrfTokenStabilTest extends CIUnitTestCase
         $token = csrf_token();
         $hash  = csrf_hash();
 
-        $field = ['nomorTiket' => 'ZZ-CSRF-000-000', $token => $hash];
+        $field = [$token => $hash];
 
         $this->postTanpaDitolak($field, 'POST pertama dengan token valid');
 

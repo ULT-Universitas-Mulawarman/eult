@@ -46,6 +46,18 @@ log "Backup   : $BACKUP_DIR (simpan $KEEP_BACKUPS terakhir)"
 [ -f "$TARGET/public/index.php" ] || die "$TARGET bukan aplikasi CI4 (public/index.php tidak ada)"
 [ -w "$TARGET" ]                  || die "User $(id -un) tidak bisa menulis ke $TARGET (jalankan runner sebagai pemilik direktori)"
 
+# Catat UID:GID pemilik direktori aplikasi agar berkas baru & .git tidak tertinggal
+# berpemilik root apabila service self-hosted runner dijalankan sebagai root.
+TARGET_UID="$(stat -c '%u' "$TARGET" 2>/dev/null || id -u)"
+TARGET_GID="$(stat -c '%g' "$TARGET" 2>/dev/null || id -g)"
+
+pulihkan_kepemilikan_target() {
+    if [ "$(id -u)" -eq 0 ] && [ "$TARGET_UID" != "0" ]; then
+        find "$TARGET" \( -not -user "$TARGET_UID" -o -not -group "$TARGET_GID" \) \
+            -exec chown -h "$TARGET_UID:$TARGET_GID" {} + 2>/dev/null || true
+    fi
+}
+
 command -v rsync >/dev/null || die "rsync belum terpasang"
 command -v php   >/dev/null || die "php tidak ditemukan di PATH"
 command -v tar   >/dev/null || die "tar tidak ditemukan"
@@ -101,7 +113,7 @@ log "Menyinkronkan kode ke produksi"
 # .github/ ikut disinkronkan (bukan dikecualikan) supaya working tree produksi
 # sama persis dengan commit dan `git status` di sana bersih. File workflow di
 # produksi tidak pernah dieksekusi.
-rsync -a --delete --delay-updates --itemize-changes \
+rsync -a --checksum --no-owner --no-group --delete --delay-updates --itemize-changes \
     --exclude='/.git/' \
     --exclude='/.env' \
     --exclude='/writable/' \
@@ -145,55 +157,103 @@ rm -f /tmp/eult-rsync.log
 #
 # Aman: .env, writable/, dan vendor/ di-gitignore sehingga tidak pernah
 # dilaporkan sebagai perubahan. Kegagalan di sini hanya diperingatkan.
+# Pastikan struktur writable/ lengkap (dibuat bila belum ada, tidak dihapus)
+# serta pulihkan berkas pelindung yang di-track Git (index.html, .htaccess)
+# sebelum menyamakan metadata Git agar `git status` tidak melaporkan file hilang.
+for d in cache logs session uploads debugbar; do
+    mkdir -p "$TARGET/writable/$d"
+done
+for pelindung in \
+    writable/.htaccess \
+    writable/index.html \
+    writable/cache/index.html \
+    writable/logs/index.html \
+    writable/session/index.html \
+    writable/uploads/index.html \
+    writable/debugbar/index.html; do
+    if [ -f "$SOURCE/$pelindung" ] && [ ! -f "$TARGET/$pelindung" ]; then
+        cp -p "$SOURCE/$pelindung" "$TARGET/$pelindung"
+    fi
+done
+
+# Wrapper git yang mendaftarkan $SOURCE dan $TARGET sebagai safe.directory
+# lewat environment GIT_CONFIG_* (diwariskan juga ke subproses git-upload-pack
+# saat `git fetch`), sehingga tidak gagal oleh "dubious ownership" bila runner
+# dijalankan sebagai user berbeda (mis. root vs eultunmul).
+git_aman() {
+    GIT_CONFIG_COUNT=2 \
+    GIT_CONFIG_KEY_0=safe.directory \
+    GIT_CONFIG_VALUE_0="$SOURCE" \
+    GIT_CONFIG_KEY_1=safe.directory \
+    GIT_CONFIG_VALUE_1="$TARGET" \
+    git "$@"
+}
+
 sync_git_metadata() {
     [ -d "$TARGET/.git" ] || return 0
     command -v git >/dev/null 2>&1 || { warn "git tidak ada; metadata git produksi dilewati"; return 0; }
-    git -C "$SOURCE" rev-parse --git-dir >/dev/null 2>&1 \
-        || { warn "Sumber bukan repo git; metadata git produksi dilewati"; return 0; }
 
-    local sha branch err shallow
-    sha=$(git -C "$SOURCE" rev-parse HEAD 2>/dev/null) || return 0
-    branch=$(git -C "$TARGET" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch="main"
+    local sha branch err shallow sisa
+    if ! err=$(git_aman -C "$SOURCE" rev-parse --git-dir 2>&1); then
+        warn "Sumber bukan repo git yang dapat dibaca; metadata git produksi dilewati"
+        [ -n "$err" ] && warn "  $err"
+        return 0
+    fi
+
+    sha=$(git_aman -C "$SOURCE" rev-parse HEAD 2>/dev/null) || return 0
+    branch=$(git_aman -C "$TARGET" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch="main"
     [ "$branch" = "HEAD" ] && branch="main"
 
     # Repo produksi bisa berupa shallow clone (mis. `git clone --depth 1`).
     # Pada clone shallow, `fetch HEAD` hanya membawa satu commit tanpa parent,
     # sehingga `git log`/`git status` gagal ("Could not read <parent>").
     # Karena itu shallow di-unshallow lebih dulu; history repo ini kecil.
-    shallow=$(git -C "$TARGET" rev-parse --is-shallow-repository 2>/dev/null || echo false)
+    shallow=$(git_aman -C "$TARGET" rev-parse --is-shallow-repository 2>/dev/null || echo false)
     if [ "$shallow" = "true" ]; then
         log "Repo produksi shallow — mengambil history lengkap"
-        if ! err=$(git -C "$TARGET" fetch --quiet --no-tags --unshallow "$SOURCE" HEAD 2>&1); then
+        if ! err=$(git_aman -C "$TARGET" fetch --quiet --no-tags --unshallow "$SOURCE" HEAD 2>&1); then
             warn "unshallow gagal; metadata git dilewati"
             [ -n "$err" ] && warn "  $err"
             return 0
         fi
-    elif ! err=$(git -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>&1); then
+    elif ! err=$(git_aman -C "$TARGET" fetch --quiet --no-tags "$SOURCE" HEAD 2>&1); then
         warn "fetch objek git dari workspace gagal; metadata git dilewati"
         [ -n "$err" ] && warn "  $err"
         return 0
     fi
 
-    if ! err=$(git -C "$TARGET" update-ref "refs/heads/$branch" "$sha" 2>&1); then
+    if ! err=$(git_aman -C "$TARGET" update-ref "refs/heads/$branch" "$sha" 2>&1); then
         warn "update-ref ke ${sha:0:7} gagal; metadata git dilewati"
         [ -n "$err" ] && warn "  $err"
         return 0
     fi
 
-    if ! err=$(git -C "$TARGET" reset --mixed --quiet 2>&1); then
+    # Pastikan HEAD menunjuk ke branch aktif (memulihkan bila sebelumnya detached)
+    git_aman -C "$TARGET" symbolic-ref HEAD "refs/heads/$branch" >/dev/null 2>&1 || true
+
+    # Samakan juga ref remote-tracking lokal agar `git status` tidak menampilkan "ahead of origin/..."
+    if git_aman -C "$TARGET" show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+        git_aman -C "$TARGET" update-ref "refs/remotes/origin/$branch" "$sha" >/dev/null 2>&1 || true
+    fi
+
+    if ! err=$(git_aman -C "$TARGET" reset --mixed --quiet 2>&1); then
         warn "reset --mixed gagal; metadata git mungkin tidak akurat"
         [ -n "$err" ] && warn "  $err"
         return 0
     fi
 
     log "Git produksi disinkronkan ke ${sha:0:7} ($branch)"
+
+    sisa=$(git_aman -C "$TARGET" status --porcelain 2>/dev/null || true)
+    if [ -z "$sisa" ]; then
+        log "Status git produksi bersih (working tree clean)"
+    else
+        warn "Status git produksi masih memiliki entri belum bersih:"
+        printf '%s\n' "$sisa" | head -20 | sed 's/^/    /'
+    fi
 }
 sync_git_metadata
-
-# Pastikan struktur writable/ lengkap (dibuat bila belum ada, tidak dihapus).
-for d in cache logs session uploads debugbar; do
-    mkdir -p "$TARGET/writable/$d"
-done
+pulihkan_kepemilikan_target
 
 # ------------------------------------------------------- migrasi & cache -----
 
@@ -232,6 +292,9 @@ log "Health check OK (HTTP $code)"
 # Smoke test CLI: memastikan framework boot penuh dengan .env produksi.
 php spark routes >/dev/null 2>&1 || die "Aplikasi gagal boot (php spark routes error)"
 log "Smoke test CLI OK"
+
+# Pastikan berkas log/cache yang baru tersentuh oleh perintah CLI di atas tetap dimiliki user aplikasi.
+pulihkan_kepemilikan_target
 
 ROLLBACK_NEEDED=0
 trap - ERR

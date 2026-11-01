@@ -114,4 +114,28 @@ final class AsetVersiTest extends CIUnitTestCase
         $this->assertStringContainsString('var KTApp=', $isiScripts);
         $this->assertStringContainsString('var KTUtil=', $isiScripts);
     }
+
+    public function testBundleGlobalBebasDariProbeInlineEventHandlerDanInlineStyleCsp(): void
+    {
+        $berkasBundle = [
+            'assets/plugins/global/plugins.bundle.js',
+            'assets_val/plugins/global/plugins.bundle.js',
+        ];
+
+        foreach ($berkasBundle as $relatif) {
+            $isi = (string) file_get_contents(FCPATH . $relatif);
+
+            $this->assertDoesNotMatchRegularExpression(
+                '/\.setAttribute\([^,]+,\s*["\']return;["\']\)/',
+                $isi,
+                sprintf('%s masih mengandung probe setAttribute(..., "return;") yang memicu pelanggaran CSP script-src-attr.', $relatif)
+            );
+
+            $this->assertStringNotContainsString(
+                '<svg><p><style><img',
+                $isi,
+                sprintf('%s masih mengandung probe mXSS DOMPurify lama yang memicu pelanggaran CSP style-src-elem dan script-src-attr.', $relatif)
+            );
+        }
+    }
 }

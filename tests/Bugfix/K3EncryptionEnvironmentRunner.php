@@ -234,6 +234,20 @@ if (is_string($overrideLegacyKey) && $overrideLegacyKey !== '') {
     putenv('EULT_ENCRYPTION_LEGACY_KEY=' . $overrideLegacyKey);
 }
 
+// --- Sejak commit 3efa0fe, `Enkripsi::kunciLegacy()` TIDAK langsung jatuh
+// ke hardcode ketika EULT_ENCRYPTION_LEGACY_KEY kosong: ia lebih dulu
+// memakai `encryption.key` dari .env (hex2bin:, 32 byte) bila ada, dan
+// hardcode `SuPer_Enc-Key2010` baru dipakai bila KEDUANYA kosong.
+//
+// Flag ini mengosongkan `encryption.key` pada SELURUH sumber yang dibaca
+// `env()` (perlakuan sama seperti EULT_ENCRYPTION_LEGACY_KEY di atas),
+// sehingga jalur hardcode — yang dijamin tetap tersedia untuk development
+// oleh Requirement 3.8 — dapat diuji secara nyata, bukan diasumsikan.
+if (getenv('K3_FORCE_EMPTY_FRAMEWORK_KEY') === '1') {
+    unset($_ENV['encryption.key'], $_SERVER['encryption.key']);
+    putenv('encryption.key');
+}
+
 // --- Path file log CI4 yang akan ditulis handler default (FileHandler,
 // lihat app/Config/Logger.php) untuk TANGGAL HARI INI, agar pertambahan
 // ukuran file dapat diamati sebelum/sesudah panggilan Enkripsi.
@@ -286,6 +300,12 @@ if (is_string($envKeyRawValue) && $envKeyRawValue !== '') {
     $decodedWithEnvKeyIfPresent = $enkripsi->decode($encoded, $envKeyRawValue);
 }
 
+// Observasi round-trip TANPA parameter kunci: encode() lalu decode() pada
+// instance yang sama. Ini kontrak yang dijaga di development ketika
+// `encryption.key` terisi — kunci efektif boleh berubah antar-revisi,
+// tetapi encode/decode SHALL tetap konsisten satu sama lain.
+$decodedWithDefaultKey = $enkripsi->decode($encoded);
+
 $logSizeAfter = is_file($logFilePath) ? filesize($logFilePath) : 0;
 
 $logContainsMarker = false;
@@ -312,6 +332,7 @@ echo json_encode([
     'encoded'                         => $encoded,
     'decodedWithLiteralHardcodedKey'  => $decodedWithLiteralHardcodedKey,
     'decodedWithEnvKeyIfPresent'      => $decodedWithEnvKeyIfPresent,
+    'decodedWithDefaultKey'           => $decodedWithDefaultKey,
     'logFileSizeBeforeBytes'          => $logSizeBefore,
     'logFileSizeAfterBytes'           => $logSizeAfter,
     'logFileContainsMarker'           => $logContainsMarker,

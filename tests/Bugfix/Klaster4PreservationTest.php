@@ -279,19 +279,27 @@ final class Klaster4PreservationTest extends CIUnitTestCase
     /**
      * Property 2 (Preservation) — OBSERVASI a: K3 Skenario 1.
      * `ENVIRONMENT=development` dengan `EULT_ENCRYPTION_LEGACY_KEY`
-     * KOSONG (bugfix.md 3.8) — fallback hardcode SHALL CONTINUE TO
-     * aktif tanpa peringatan blocking apa pun, agar workflow
-     * development tidak terganggu. Penghapusan fallback K3 (task 26.1)
-     * HANYA berlaku untuk jalur production -- baseline development ini
-     * TIDAK BOLEH berubah pasca-fix.
+     * KOSONG (bugfix.md 3.8) — jalur development SHALL tetap berfungsi
+     * tanpa peringatan blocking apa pun, agar workflow development
+     * tidak terganggu. Penghapusan fallback K3 (task 26.1) HANYA
+     * berlaku untuk jalur production.
+     *
+     * REVISI (commit 3efa0fe "pakai encryption.key .env sebagai fallback
+     * legacy"): kunci efektif di development TIDAK LAGI langsung hardcode.
+     * `Enkripsi::kunciLegacy()` kini memakai `encryption.key` dari .env
+     * (hex2bin:, 32 byte) lebih dulu; hardcode `SuPer_Enc-Key2010` hanya
+     * dipakai bila KEDUANYA kosong. Baseline lama mengunci nilai kunci
+     * spesifik sehingga merah, padahal perilaku yang dijaga Requirement
+     * 3.8 — "development tetap jalan tanpa peringatan" — masih utuh.
+     *
+     * Test ini kini mengunci KONTRAK, bukan nama kunci: encode() berhasil,
+     * decode() mengembalikan nilai semula, dan tidak ada log critical.
+     * Jaminan hardcode-nya sendiri diuji terpisah di skenario 1b.
      */
     public function testK3Skenario1DevelopmentDenganEnvKeyKosongFallbackTetapAktifTanpaWarning(): void
     {
-        $markerUnik = 'K4PRES_K3S1_MARKER_' . bin2hex(random_bytes(8));
-
         $hasil = $this->jalankanRunnerSubprocessK3('development', [
             'K3_FORCE_EMPTY_LEGACY_KEY' => '1',
-            'K3_LOG_MARKER'             => $markerUnik,
         ]);
         $decoded = $hasil['decoded'];
 
@@ -307,14 +315,13 @@ final class Klaster4PreservationTest extends CIUnitTestCase
         self::assertNotFalse($decoded['encoded'], 'Prasyarat: Enkripsi::encode() SHALL menghasilkan ciphertext non-false pada kode belum diperbaiki.');
 
         // *** BASELINE PRESERVASI (bugfix.md 3.8) ***
-        // Fallback hardcode SHALL CONTINUE TO dipakai sebagai kunci
-        // efektif di development ketika env key kosong -- decode()
-        // dengan kunci literal fallback SHALL berhasil mengembalikan
-        // nilai probe semula.
+        // Di development, encode()/decode() SHALL tetap konsisten satu sama
+        // lain tanpa konfigurasi tambahan — apa pun kunci efektif yang
+        // dipilih kunciLegacy().
         self::assertSame(
             self::NILAI_PROBE,
-            $decoded['decodedWithLiteralHardcodedKey'],
-            'PRESERVATION BASELINE Klaster 4 (Requirement 3.8): pada ENVIRONMENT=development dengan EULT_ENCRYPTION_LEGACY_KEY kosong, fallback hardcode SHALL CONTINUE TO dipakai sebagai kunci efektif Enkripsi::encode() -- baseline ini WAJIB dipertahankan identik pasca-fix K3 (task 26.1), karena penghapusan fallback HANYA berlaku untuk ENVIRONMENT=production, agar workflow development tidak terganggu.'
+            $decoded['decodedWithDefaultKey'],
+            'PRESERVATION BASELINE Klaster 4 (Requirement 3.8): pada ENVIRONMENT=development dengan EULT_ENCRYPTION_LEGACY_KEY kosong, encode() lalu decode() SHALL mengembalikan nilai semula — workflow development tidak boleh menuntut konfigurasi kunci tambahan.'
         );
 
         // *** BASELINE PRESERVASI (bugfix.md 3.8, "tanpa peringatan") ***
@@ -326,6 +333,42 @@ final class Klaster4PreservationTest extends CIUnitTestCase
         self::assertFalse(
             $decoded['logFileContainsMarker'],
             'PRESERVATION BASELINE Klaster 4 (Requirement 3.8): pada ENVIRONMENT=development dengan EULT_ENCRYPTION_LEGACY_KEY kosong, TIDAK ADA baris log mengandung marker unik ditemukan -- baseline ini WAJIB dipertahankan pasca-fix K3 (task 26.1 HANYA menambahkan log critical untuk kondisi production, TIDAK untuk development apa pun), agar workflow development tidak menerima peringatan blocking yang tidak perlu.'
+        );
+    }
+
+    /**
+     * Property 2 (Preservation) — OBSERVASI a2: K3 Skenario 1b.
+     *
+     * Jaminan yang mendasari Requirement 3.8 — "fallback hardcode tetap
+     * tersedia di development" — diuji pada kondisi yang benar-benar
+     * memicunya: `EULT_ENCRYPTION_LEGACY_KEY` DAN `encryption.key`
+     * sama-sama kosong. Sebelum commit 3efa0fe kondisi ini adalah
+     * default; sesudahnya ia menjadi jalur terakhir.
+     *
+     * Tanpa test ini, penghapusan fallback hardcode bisa lolos tanpa
+     * terdeteksi karena `encryption.key` di .env selalu menutupinya.
+     */
+    public function testK3Skenario1bDevelopmentTanpaKunciSamaSekaliTetapMemakaiFallbackHardcode(): void
+    {
+        $hasil = $this->jalankanRunnerSubprocessK3('development', [
+            'K3_FORCE_EMPTY_LEGACY_KEY'     => '1',
+            'K3_FORCE_EMPTY_FRAMEWORK_KEY'  => '1',
+        ]);
+        $decoded = $hasil['decoded'];
+
+        self::assertSame('development', $decoded['environment'], 'Prasyarat: subprocess SHALL boot dengan ENVIRONMENT="development".');
+        self::assertNull($decoded['envKeyRawValue'], 'Prasyarat: EULT_ENCRYPTION_LEGACY_KEY SHALL kosong pada subprocess.');
+        self::assertNotFalse($decoded['encoded'], 'Prasyarat: Enkripsi::encode() SHALL menghasilkan ciphertext non-false.');
+
+        self::assertSame(
+            self::NILAI_PROBE,
+            $decoded['decodedWithLiteralHardcodedKey'],
+            'PRESERVATION BASELINE Klaster 4 (Requirement 3.8): ketika EULT_ENCRYPTION_LEGACY_KEY DAN encryption.key sama-sama kosong pada ENVIRONMENT=development, kunci efektif SHALL fallback hardcode legacy sehingga decode dengan kunci literal tersebut mengembalikan nilai semula.'
+        );
+
+        self::assertFalse(
+            $decoded['logFileContainsMarker'],
+            'PRESERVATION BASELINE Klaster 4 (Requirement 3.8): jalur fallback hardcode di development SHALL TIDAK menulis log critical (log itu hanya untuk production).'
         );
     }
 

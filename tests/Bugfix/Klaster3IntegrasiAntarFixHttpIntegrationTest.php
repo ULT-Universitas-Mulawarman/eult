@@ -184,7 +184,40 @@ final class Klaster3IntegrasiAntarFixHttpIntegrationTest extends CIUnitTestCase
 
     private function bersihkanData(): void
     {
+        // d_archive punya FK ke d_ticketing; hapus arsip lebih dulu agar
+        // tidak tersisa baris yatim, lalu berkas fisiknya.
+        $arsip = $this->koneksi->table('d_archive')
+            ->select('archiveFile')
+            ->where('archiveTrackingId IN (SELECT ticketTrackingId FROM d_ticketing WHERE ticketEmail = ' . $this->koneksi->escape(self::EMAIL_FIXTURE) . ')', null, false)
+            ->get()->getResultArray();
+
+        $this->koneksi->table('d_archive')
+            ->where('archiveTrackingId IN (SELECT ticketTrackingId FROM d_ticketing WHERE ticketEmail = ' . $this->koneksi->escape(self::EMAIL_FIXTURE) . ')', null, false)
+            ->delete();
+
+        foreach ($arsip as $baris) {
+            $berkas = WRITEPATH . 'uploads/ticketing/' . basename((string) $baris['archiveFile']);
+            if (is_file($berkas)) {
+                @unlink($berkas);
+            }
+        }
+
         $this->koneksi->table('d_ticketing')->where('ticketEmail', self::EMAIL_FIXTURE)->delete();
+    }
+
+    /**
+     * PDF minimal yang lolos `eult_upload_konten_valid()` (magic byte
+     * `%PDF-`). Sejak fix upload atomik (commit 1773965), `savetiket()`
+     * MEWAJIBKAN lampiran — tanpa berkas, request sah sekalipun ditolak
+     * "Berkas persyaratan wajib dilampirkan." sebelum tiket dibuat.
+     */
+    private function buatPdfUji(): string
+    {
+        $jalur = tempnam(sys_get_temp_dir(), 'k22_uji_') . '.pdf';
+
+        file_put_contents($jalur, "%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n");
+
+        return $jalur;
     }
 
     /**
@@ -255,6 +288,26 @@ final class Klaster3IntegrasiAntarFixHttpIntegrationTest extends CIUnitTestCase
 
         $tokenCsrfAsli = $tangkapanToken[1];
 
+        // Sejak fix upload atomik, `savetiket()` juga memeriksa token
+        // idempotensi (`submitToken`) untuk menutup double-click. Halaman
+        // /login merendernya sebagai hidden input dari session, jadi
+        // browser sungguhan SELALU mengirimkannya — test ini harus sama.
+        // Tanpa field ini request ditolak "Permintaan ini sudah diproses
+        // sebelumnya" karena session sudah punya token dari render form.
+        $cocokSubmitToken = preg_match(
+            '/name="submitToken"[^>]*value="([a-f0-9]{32})"/',
+            $halamanLogin['body'],
+            $tangkapanSubmitToken
+        );
+
+        self::assertSame(
+            1,
+            $cocokSubmitToken,
+            'Prasyarat: HTML halaman /login SHALL mengandung hidden input submitToken (eult_submit_token()) — token idempotensi yang dikirim browser pada setiap submit tiket.'
+        );
+
+        $submitTokenAsli = $tangkapanSubmitToken[1];
+
         $sessionId = $this->ambilSessionIdDariCookieJar();
 
         self::assertNotNull(
@@ -274,17 +327,35 @@ final class Klaster3IntegrasiAntarFixHttpIntegrationTest extends CIUnitTestCase
         );
 
         // --- (c) POST login/savetiket dengan SEMUA elemen asli sekaligus ---
-        $hasilSubmit = $this->httpKeServerLive('POST', 'login/savetiket', [
-            'csrf_test_name'   => $tokenCsrfAsli,
-            'captcha'          => $captchaAsli,
-            'ticketCategories' => '1',
-            'ticketEmail'      => self::EMAIL_FIXTURE,
-            'ticketNoHp'       => '081234567890',
-            'ticketSubject'    => 'Uji Integrasi Antar-Fix Task 22',
-            'ticketMessage'    => 'Verifikasi flow end-to-end: CSRF token asli dari HTML + captcha gambar asli dari session + rate limit + CSP aktif bersamaan.',
-            'ticketName'       => 'Pemohon Uji Integrasi Task22',
-            'ticketPriority'   => '1',
-        ], ['X-Requested-With: XMLHttpRequest']);
+        $pdfUji = $this->buatPdfUji();
+
+        try {
+            $hasilSubmit = $this->httpKeServerLive('POST', 'login/savetiket', [
+                'csrf_test_name'   => $tokenCsrfAsli,
+                'captcha'          => $captchaAsli,
+                'submitToken'      => $submitTokenAsli,
+                // Layanan 9 ("Ijin Peminjaman Gedung") — termasuk
+                // `ModelMaster::layananUmumIds()`. Request ini tidak mengirim
+                // ticketIdentitas, sehingga pemohon diperlakukan sebagai UMUM;
+                // layanan 1 yang dipakai sebelumnya bukan layanan publik dan
+                // kini ditolak `savetiket()` sebelum keempat mekanisme yang
+                // diuji di sini sempat terbukti bersamaan.
+                'ticketCategories' => '9',
+                'ticketEmail'      => self::EMAIL_FIXTURE,
+                'ticketNoHp'       => '081234567890',
+                'ticketSubject'    => 'Uji Integrasi Antar-Fix Task 22',
+                'ticketMessage'    => 'Verifikasi flow end-to-end: CSRF token asli dari HTML + captcha gambar asli dari session + rate limit + CSP aktif bersamaan.',
+                'ticketName'       => 'Pemohon Uji Integrasi Task22',
+                'ticketPriority'   => '1',
+                // Multipart: CURLOPT_POSTFIELDS berisi CURLFile otomatis
+                // dikirim sebagai multipart/form-data.
+                'ticketArchiveId'  => new \CURLFile($pdfUji, 'application/pdf', 'uji-integrasi.pdf'),
+            ], ['X-Requested-With: XMLHttpRequest']);
+        } finally {
+            if (is_file($pdfUji)) {
+                unlink($pdfUji);
+            }
+        }
 
         self::assertSame(
             200,

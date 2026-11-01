@@ -204,7 +204,14 @@ final class Klaster3PreservationTest extends CIUnitTestCase
     {
         return [
             'captcha'          => self::CAPTCHA_DIKETAHUI,
-            'ticketCategories' => '1',
+            // Layanan 9 ("Ijin Peminjaman Gedung") — termasuk daftar
+            // `ModelMaster::layananUmumIds()`. Fixture ini tidak mengirim
+            // ticketIdentitas, sehingga pemohon diperlakukan sebagai UMUM
+            // (eult_pemohon_umum(): belum terverifikasi = umum). Layanan 1
+            // yang dipakai sebelumnya BUKAN layanan publik, sehingga sejak
+            // fix(batas layanan umum) `savetiket()` menolaknya lebih dulu
+            // dan baseline ini tidak pernah sampai ke jalur sukses.
+            'ticketCategories' => '9',
             'ticketEmail'      => self::EMAIL_AMAN,
             'ticketNoHp'       => '081234567890',
             'ticketSubject'    => 'Uji Preservasi Klaster 3',
@@ -266,22 +273,39 @@ final class Klaster3PreservationTest extends CIUnitTestCase
             );
         }
 
+        // REVISI (fix upload atomik, commit 1773965): `savetiket()` kini
+        // MEWAJIBKAN lampiran PDF sebelum tiket di-INSERT. Dispatch
+        // in-process tidak bisa menyertakan berkas sungguhan karena
+        // `UploadedFile::isValid()` mensyaratkan `is_uploaded_file()`,
+        // yang selalu false di CLI. Karena itu jalur SUKSES (+ insert
+        // d_ticketing) tidak lagi dapat dicapai dari sini dan diuji oleh
+        // `Klaster3IntegrasiAntarFixHttpIntegrationTest` lewat HTTP
+        // multipart sungguhan.
+        //
+        // Yang tetap diuji di sini adalah DUA hal yang justru menjadi inti
+        // fix tersebut: kontrak JSON tidak berubah, dan penolakan berkas
+        // TIDAK meninggalkan tiket (dulu tiket ter-commit lebih dulu
+        // sehingga lahir 4.156 tiket tanpa arsip di produksi).
         self::assertStringContainsString(
-            '"success"',
+            '"danger"',
             $bodiMentah,
-            'PRESERVATION BASELINE Klaster 3 (Requirement 3.13): request AJAX sah (captcha benar, field lengkap, header AJAX) SHALL menghasilkan status "success" pada kode belum diperbaiki — baseline ini WAJIB dipertahankan pasca-fix T1 selama token CSRF valid disertakan (bugfix.md 3.13).'
+            'Kontrak respons: request tanpa lampiran SHALL ditolak dengan status "danger".'
         );
 
-        // Counterexample-preservasi konkret: baris d_ticketing SUNGGUHAN
-        // ter-insert untuk request AJAX sah ini (bukti request diproses
-        // tuntas, bukan sekadar status HTTP 200 kosong).
+        self::assertStringContainsString(
+            'Berkas persyaratan wajib dilampirkan',
+            $bodiMentah,
+            'Kontrak respons: pesan penolakan SHALL menyebut lampiran persyaratan, agar pemohon tahu apa yang kurang.'
+        );
+
+        // Atomisitas: tidak ada tiket yang lahir dari request yang ditolak.
         $tiketTercipta = $this->koneksi->table('d_ticketing')
             ->where('ticketEmail', self::EMAIL_AMAN)
             ->get()->getRowArray();
 
-        self::assertNotNull(
+        self::assertNull(
             $tiketTercipta,
-            'PRESERVATION BASELINE Klaster 3 (Requirement 3.13): request AJAX sah ke login/savetiket SHALL menghasilkan baris d_ticketing ter-insert pada kode belum diperbaiki — baseline ini WAJIB dipertahankan pasca-fix T1 untuk request yang menyertakan token CSRF valid.'
+            'FIX UPLOAD ATOMIK (commit 1773965): request yang ditolak pada fase validasi berkas SHALL TIDAK meninggalkan baris d_ticketing — sebelumnya tiket di-INSERT lebih dulu lalu berkas ditolak, menghasilkan tiket tanpa arsip.'
         );
     }
 

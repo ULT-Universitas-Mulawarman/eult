@@ -14,8 +14,8 @@
     <!--end::Fonts -->
 
     <!--begin::Global Theme Styles(used by all pages) -->
-    <link href="<?= base_url(); ?>assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
-    <link href="<?= base_url(); ?>assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="<?= eult_url_aset('assets/plugins/global/plugins.bundle.css') ?>" rel="stylesheet" type="text/css" />
+    <link href="<?= eult_url_aset('assets/css/style.bundle.css') ?>" rel="stylesheet" type="text/css" />
     <!--end::Global Theme Styles -->
 
     <!--begin::Layout Skins(used by all pages) -->
@@ -2418,9 +2418,9 @@
     <!-- end::Global Config -->
 
     <!--begin::Global Theme Bundle(used by all pages) -->
-    <script src="<?= base_url(); ?>assets/plugins/global/plugins.bundle.js" type="text/javascript"></script>
-    <script src="<?= base_url(); ?>assets/js/scripts.bundle.js" type="text/javascript"></script>
-    <script src="<?= base_url(); ?>assets/js/pages/eult-csrf.js?v=<?= eult_versi_aset('assets/js/pages/eult-csrf.js') ?>" type="text/javascript"></script>
+    <script src="<?= eult_url_aset('assets/plugins/global/plugins.bundle.js') ?>" type="text/javascript"></script>
+    <script src="<?= eult_url_aset('assets/js/scripts.bundle.js') ?>" type="text/javascript"></script>
+    <script src="<?= eult_url_aset('assets/js/pages/eult-csrf.js') ?>" type="text/javascript"></script>
     <!--end::Global Theme Bundle -->
 
     <!--begin::Page Scripts(used by this page) -->

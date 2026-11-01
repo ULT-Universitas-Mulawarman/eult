@@ -138,8 +138,13 @@ final class DeployScriptTest extends CIUnitTestCase
         chmod($target . '/writable/logs/index.html', 0777);
         $this->jalankan('git checkout --detach ' . escapeshellarg($shaAwal), $target);
 
-        // Tambahkan commit baru di source + vendor hasil build produksi
+        // Tambahkan commit baru di source + vendor hasil build produksi + aset prekompresi .gz
+        mkdir($source . '/public/assets', 0775, true);
         file_put_contents($source . '/public/index.php', "<?php echo 'v2';\n");
+        file_put_contents($source . '/public/assets/plugins.bundle.js', "var x=1;\n");
+        file_put_contents($source . '/public/assets/plugins.bundle.js.gz', gzencode("var x=1;\n", 9));
+        touch($source . '/public/assets/plugins.bundle.js', 1700000100);
+        touch($source . '/public/assets/plugins.bundle.js.gz', 1700000200);
         file_put_contents($source . '/app/Contoh.php', "<?php // versi 2\n");
         file_put_contents($source . '/app/FiturBaru.php', "<?php // fitur baru\n");
         $this->jalankan('git add -A && git commit -m "rilis kedua"', $source);
@@ -252,6 +257,12 @@ BASH;
             'Mode izin berkas pelindung writable harus dipulihkan tanpa bit executable kotor.'
         );
         self::assertFileExists($target . '/writable/logs/log-runtime.log', 'Berkas log runtime produksi tidak boleh terhapus.');
+        clearstatcache();
+        self::assertSame(
+            filemtime($target . '/public/assets/plugins.bundle.js'),
+            filemtime($target . '/public/assets/plugins.bundle.js.gz'),
+            'mtime berkas prekompresi .gz di public/ harus disamakan dengan berkas aslinya untuk Nginx gzip_static.'
+        );
         self::assertSame([], glob($this->dirUji . '/eult-gitconfig.*') ?: [], 'Berkas konfigurasi Git sementara wajib dibersihkan setelah deploy.');
         self::assertSame('', $statusTarget, 'git status --porcelain di direktori produksi harus bersih total.');
     }

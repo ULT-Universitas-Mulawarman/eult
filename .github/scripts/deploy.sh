@@ -178,6 +178,15 @@ for pelindung in \
     fi
 done
 
+# Samakan mtime berkas prekompresi .gz di public/ dengan berkas aslinya
+# agar modul ngx_http_gzip_static_module di Nginx melayani berkas .gz.
+if [ -d "$TARGET/public" ]; then
+    while IFS= read -r -d '' berkas_gz; do
+        berkas_asli="${berkas_gz%.gz}"
+        [ -f "$berkas_asli" ] && touch -r "$berkas_asli" "$berkas_gz"
+    done < <(find "$TARGET/public" -type f -name '*.gz' -print0 2>/dev/null)
+fi
+
 # Pulihkan kepemilikan working tree sebelum reset --mixed agar stat cache
 # pada .git/index langsung cocok dengan UID/GID user aplikasi.
 pulihkan_kepemilikan_target

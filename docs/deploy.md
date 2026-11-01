@@ -199,6 +199,46 @@ cd /home/eultunmul/apps/actions-runner/eult-project/eult/eult
 GITHUB_WORKSPACE="$PWD" DEPLOY_DRY_RUN=true bash .github/scripts/deploy.sh
 ```
 
+## Optimasi Aset Statis Nginx (`gzip_static` & `Cache-Control`)
+
+Seluruh berkas `.bundle.js` dan `.bundle.css` di `public/assets/` serta `public/assets_val/` sudah di-minify dan disertai berkas prekompresi `.gz` (`gzip -9`) serta parameter versi `?v=<mtime>` melalui helper `eult_url_aset()`.
+
+Agar Nginx di `ulthost` menyajikan berkas `.gz` secara langsung tanpa beban kompresi CPU dan mengaktifkan cache browser jangka panjang, tambahkan konfigurasi berikut di blok `server` Virtualmin (`/etc/nginx/sites-available/eult.unmul.ac.id.conf`) atau `/etc/nginx/conf.d/gzip-static.conf`:
+
+```nginx
+gzip on;
+gzip_static on;
+gzip_vary on;
+gzip_comp_level 6;
+gzip_min_length 1024;
+gzip_types
+    text/plain
+    text/css
+    text/javascript
+    application/javascript
+    application/x-javascript
+    application/json
+    application/xml
+    image/svg+xml
+    font/ttf
+    font/otf
+    font/woff
+    font/woff2;
+
+location ~* \.(?:css|js|mjs|woff2?|ttf|otf|eot|ico|svg|png|jpe?g|gif|webp)$ {
+    gzip_static on;
+    expires 365d;
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    access_log off;
+}
+```
+
+Lalu uji dan muat ulang Nginx:
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 ## Troubleshooting
 
 | Gejala | Penyebab umum | Tindakan |

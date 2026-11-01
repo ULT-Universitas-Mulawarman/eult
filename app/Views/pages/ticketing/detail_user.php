@@ -84,8 +84,8 @@ $labelStatusLive = $selesai ? 'Selesai' : ($ditolak ? 'Tidak dilanjutkan' : 'Dal
     <?= csrf_meta() ?>
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins:300,400,500,600,700|Roboto:300,400,500,600,700&display=swap">
-    <link href="<?= base_url(); ?>assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
-    <link href="<?= base_url(); ?>assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+    <link href="<?= eult_url_aset('assets/plugins/global/plugins.bundle.css') ?>" rel="stylesheet" type="text/css" />
+    <link href="<?= eult_url_aset('assets/css/style.bundle.css') ?>" rel="stylesheet" type="text/css" />
     <link href="<?= base_url(); ?>assets/css/skins/header/base/light.css" rel="stylesheet" type="text/css" />
     <link href="<?= base_url(); ?>assets/css/skins/header/menu/light.css" rel="stylesheet" type="text/css" />
     <link href="<?= base_url(); ?>assets/css/skins/brand/light.css" rel="stylesheet" type="text/css" />
@@ -953,8 +953,8 @@ $labelStatusLive = $selesai ? 'Selesai' : ($ditolak ? 'Tidak dilanjutkan' : 'Dal
             }
         };
     </script>
-    <script src="<?= base_url(); ?>assets/plugins/global/plugins.bundle.js" type="text/javascript"></script>
-    <script src="<?= base_url(); ?>assets/js/scripts.bundle.js" type="text/javascript"></script>
+    <script src="<?= eult_url_aset('assets/plugins/global/plugins.bundle.js') ?>" type="text/javascript"></script>
+    <script src="<?= eult_url_aset('assets/js/scripts.bundle.js') ?>" type="text/javascript"></script>
     <script src="<?= base_url(); ?>assets/js/star-rating.min.js" type="text/javascript"></script>
     <script src="<?= base_url(); ?>assets/js/themes-rating.js"></script>
     <script type="text/javascript" {csp-script-nonce}>

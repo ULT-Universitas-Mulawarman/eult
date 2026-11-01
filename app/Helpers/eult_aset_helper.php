@@ -12,9 +12,27 @@ if (! function_exists('eult_versi_aset')) {
      */
     function eult_versi_aset(string $aset): string
     {
-        $waktu = @filemtime(FCPATH . $aset);
+        $bersih = ltrim($aset, '/');
+        $waktu  = @filemtime(FCPATH . $bersih);
 
         return $waktu !== false ? (string) $waktu : '1';
+    }
+}
+
+if (! function_exists('eult_url_aset')) {
+    /**
+     * Menghasilkan URL aset lengkap dengan parameter versi cache-buster (?v=<mtime>)
+     * agar browser dapat menyimpan aset di cache jangka panjang (immutable) dan
+     * otomatis memuat ulang hanya ketika isi berkas aset berubah.
+     *
+     * @param string $aset Jalur relatif terhadap public/ (FCPATH),
+     *                     mis. 'assets/plugins/global/plugins.bundle.js'.
+     */
+    function eult_url_aset(string $aset): string
+    {
+        $bersih = ltrim($aset, '/');
+
+        return base_url($bersih) . '?v=' . eult_versi_aset($bersih);
     }
 }
 

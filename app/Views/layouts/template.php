@@ -37,11 +37,11 @@ License: You must have a valid license purchased only from themeforest(the above
 	<!--end::Web font -->
 	<!--begin::Base Styles -->
 	<!--begin::Page Vendors -->
-	<link href="<?= base_url(); ?>assets/plugins/custom/fullcalendar/fullcalendar.bundle.css" rel="stylesheet" type="text/css" />
-	<link href="<?= base_url(); ?>assets/plugins/custom/datatables/datatables.bundle.css" rel="stylesheet" type="text/css" />
+	<link href="<?= eult_url_aset('assets/plugins/custom/fullcalendar/fullcalendar.bundle.css') ?>" rel="stylesheet" type="text/css" />
+	<link href="<?= eult_url_aset('assets/plugins/custom/datatables/datatables.bundle.css') ?>" rel="stylesheet" type="text/css" />
 	<!--end::Page Vendors -->
-	<link href="<?= base_url(); ?>assets/plugins/global/plugins.bundle.css" rel="stylesheet" type="text/css" />
-	<link href="<?= base_url(); ?>assets/css/style.bundle.css" rel="stylesheet" type="text/css" />
+	<link href="<?= eult_url_aset('assets/plugins/global/plugins.bundle.css') ?>" rel="stylesheet" type="text/css" />
+	<link href="<?= eult_url_aset('assets/css/style.bundle.css') ?>" rel="stylesheet" type="text/css" />
 	<!--end::Base Styles -->
 
 	<!--begin::Layout Skins(used by all pages) -->
@@ -169,17 +169,17 @@ License: You must have a valid license purchased only from themeforest(the above
 	<!-- end::Global Config -->
 
 	<!--begin::Base Scripts -->
-	<script src="<?= base_url(); ?>assets/plugins/global/plugins.bundle.js" type="text/javascript"></script>
-	<script src="<?= base_url(); ?>assets/js/scripts.bundle.js" type="text/javascript"></script>
-	<script src="<?= base_url(); ?>assets/js/pages/eult-csrf.js?v=<?= eult_versi_aset('assets/js/pages/eult-csrf.js') ?>" type="text/javascript"></script>
-	<script src="<?= base_url(); ?>assets/plugins/custom/tinymce/tinymce.bundle.js" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/plugins/global/plugins.bundle.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/js/scripts.bundle.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/js/pages/eult-csrf.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/plugins/custom/tinymce/tinymce.bundle.js') ?>" type="text/javascript"></script>
 	<!--begin::Page Vendors -->
-	<script src="<?= base_url(); ?>assets/plugins/custom/fullcalendar/fullcalendar.bundle.js" type="text/javascript"></script>
-	<script src="<?= base_url(); ?>assets/plugins/custom/datatables/datatables.bundle.js" type="text/javascript"></script>
-	<script src="<?= base_url(); ?>assets/js/pages/eult-datatable.js?v=<?= eult_versi_aset('assets/js/pages/eult-datatable.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/plugins/custom/fullcalendar/fullcalendar.bundle.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/plugins/custom/datatables/datatables.bundle.js') ?>" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/js/pages/eult-datatable.js') ?>" type="text/javascript"></script>
 	<!--end::Page Vendors -->
 	<!--begin::Page Snippets -->
-	<script src="<?= base_url(); ?>assets/plugins/custom/flot/flot.bundle.js" type="text/javascript"></script>
+	<script src="<?= eult_url_aset('assets/plugins/custom/flot/flot.bundle.js') ?>" type="text/javascript"></script>
 	<script src="<?= base_url(); ?>assets/js/pages/custom/pages/dashboard.js" type="text/javascript"></script>
 	<script src="<?= base_url(); ?>assets/js/pages/custom/pages/form-submit-general.js" type="text/javascript"></script>
 	<script src="<?= base_url(); ?>assets/js/star-rating.min.js" type="text/javascript"></script>

@@ -50,4 +50,21 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
             'Iframe SHALL tidak membawa src sejak awal; src dipasang skrip hanya pada layar besar.'
         );
     }
+
+    public function testPenampilPdfMobileMerenderKeCanvasDenganPdfJsSelfHosted(): void
+    {
+        $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');
+
+        self::assertStringContainsString('id="penampil-pdf-mobile"', $isi, 'Wadah pratinjau canvas mobile SHALL ada.');
+        self::assertStringContainsString('assets_val/js/pdfjs/pdf.min.js', $isi, 'PDF.js SHALL dimuat dari aset sendiri, bukan CDN.');
+        self::assertStringContainsString('assets_val/js/pdfjs/pdf.worker.min.js', $isi, 'Worker PDF.js SHALL dimuat dari aset sendiri.');
+        self::assertStringContainsString('pdfjsLib.getDocument', $isi, 'Pratinjau mobile SHALL memuat PDF lewat PDF.js.');
+        self::assertStringContainsString("createElement('canvas')", $isi, 'Halaman PDF SHALL dirender ke canvas, bukan frame.');
+
+        foreach (['pdf.min.js', 'pdf.worker.min.js'] as $berkas) {
+            $jalur = FCPATH . 'assets_val/js/pdfjs/' . $berkas;
+            self::assertFileExists($jalur, 'Aset PDF.js ' . $berkas . ' SHALL tersedia di public.');
+            self::assertGreaterThan(100_000, (int) filesize($jalur), 'Aset ' . $berkas . ' SHALL berisi library utuh, bukan berkas kosong.');
+        }
+    }
 }

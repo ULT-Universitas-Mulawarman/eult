@@ -185,13 +185,67 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     <div class="d-none d-lg-block">
                                                         <iframe id="iframe-pratinjau-pdf" data-pdf-url="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600" title="Pratinjau surat PDF"></iframe>
                                                     </div>
+                                                    <!-- Di mobile PDF dirender PDF.js ke canvas (tanpa frame sama sekali), sehingga tetap tampil inline meski penampil PDF bawaan browser terblokir CSP. -->
+                                                    <div id="penampil-pdf-mobile" class="d-lg-none">
+                                                        <p id="status-pdf-mobile" class="text-muted small mb-2">Memuat pratinjau surat...</p>
+                                                        <div id="daftar-halaman-pdf"></div>
+                                                    </div>
                                                     <script {csp-script-nonce}>
-                                                        // Iframe tanpa src tidak pernah membuat frame, jadi di mobile tidak ada request yang ditolak frame-src. URL baru dipasang pada layar besar.
                                                         (function () {
                                                             var bingkai = document.getElementById('iframe-pratinjau-pdf');
-                                                            if (bingkai && window.matchMedia('(min-width: 992px)').matches) {
-                                                                bingkai.src = bingkai.getAttribute('data-pdf-url');
+                                                            if (!bingkai) {
+                                                                return;
                                                             }
+                                                            var urlPdf = bingkai.getAttribute('data-pdf-url');
+                                                            // Iframe tanpa src tidak pernah membuat frame, jadi di mobile tidak ada request yang ditolak frame-src. URL baru dipasang pada layar besar.
+                                                            if (window.matchMedia('(min-width: 992px)').matches) {
+                                                                bingkai.src = urlPdf;
+                                                                return;
+                                                            }
+                                                            var status = document.getElementById('status-pdf-mobile');
+                                                            var daftar = document.getElementById('daftar-halaman-pdf');
+                                                            function gagal() {
+                                                                if (status) {
+                                                                    status.textContent = 'Pratinjau tidak dapat dimuat. Gunakan tombol Buka Surat PDF di Tab Baru di atas.';
+                                                                }
+                                                            }
+                                                            var skrip = document.createElement('script');
+                                                            skrip.src = <?= json_encode(eult_url_aset('assets_val/js/pdfjs/pdf.min.js')); ?>;
+                                                            skrip.onerror = gagal;
+                                                            skrip.onload = function () {
+                                                                window.pdfjsLib.GlobalWorkerOptions.workerSrc = <?= json_encode(eult_url_aset('assets_val/js/pdfjs/pdf.worker.min.js')); ?>;
+                                                                window.pdfjsLib.getDocument({ url: urlPdf }).promise.then(function (pdf) {
+                                                                    function renderHalaman(nomor) {
+                                                                        if (nomor > pdf.numPages) {
+                                                                            if (status) {
+                                                                                status.textContent = 'Pratinjau surat (' + pdf.numPages + ' halaman). Gunakan tombol di atas untuk membuka ukuran penuh.';
+                                                                            }
+                                                                            return;
+                                                                        }
+                                                                        pdf.getPage(nomor).then(function (halaman) {
+                                                                            var lebar = daftar.clientWidth || 320;
+                                                                            var skala = lebar / halaman.getViewport({ scale: 1 }).width;
+                                                                            var rasio = Math.min(window.devicePixelRatio || 1, 2);
+                                                                            var viewport = halaman.getViewport({ scale: skala * rasio });
+                                                                            var kanvas = document.createElement('canvas');
+                                                                            kanvas.width = viewport.width;
+                                                                            kanvas.height = viewport.height;
+                                                                            kanvas.style.width = '100%';
+                                                                            kanvas.style.height = 'auto';
+                                                                            kanvas.style.display = 'block';
+                                                                            kanvas.style.margin = '0 auto 12px';
+                                                                            kanvas.style.background = '#ffffff';
+                                                                            kanvas.style.border = '1px solid #ebedf2';
+                                                                            daftar.appendChild(kanvas);
+                                                                            halaman.render({ canvasContext: kanvas.getContext('2d'), viewport: viewport }).promise.then(function () {
+                                                                                renderHalaman(nomor + 1);
+                                                                            }, gagal);
+                                                                        }, gagal);
+                                                                    }
+                                                                    renderHalaman(1);
+                                                                }, gagal);
+                                                            };
+                                                            document.head.appendChild(skrip);
                                                         })();
                                                     </script>
                                                     <?php endif; ?>

@@ -217,6 +217,36 @@ final class CspFirstPartyNoncePreservationTest extends CIUnitTestCase
     }
 
     /**
+     * Penampil PDF mobile membungkus PDF same-origin dalam sub-frame
+     * internal `blob:`/`about:` (URL kosong `''` di konsol). Header
+     * hasil `finalize()` SHALL memuat `frame-src` eksplisit DAN
+     * `child-src` (fallback browser lama) yang mengizinkan ketiganya
+     * tanpa membuka domain eksternal, agar iframe PDF validitas tidak
+     * lagi ditolak sebagai "Framing '' violates ... child-src 'self'".
+     */
+    public function testHeaderMengizinkanSubFrameInternalPenampilPdfMobile(): void
+    {
+        $csp = new ContentSecurityPolicy(new \Config\ContentSecurityPolicy());
+
+        $response = new Response(new \Config\App());
+        $response->setBody('<html><body>uji</body></html>');
+        $csp->finalize($response);
+
+        $header = $response->getHeaderLine('Content-Security-Policy');
+
+        self::assertStringContainsString(
+            "frame-src 'self' blob: about:",
+            $header,
+            'Header SHALL memuat frame-src eksplisit untuk sub-frame internal penampil PDF mobile. Header: ' . $header
+        );
+        self::assertStringContainsString(
+            "child-src 'self' blob: about:",
+            $header,
+            'Header SHALL menyamakan child-src sebagai fallback frame-src bagi browser lama. Header: ' . $header
+        );
+    }
+
+    /**
      * Memindai seluruh `*.php` di app/Views (rekursif, kecuali direktori
      * cetak PDF) dan mengembalikan daftar "path:baris: temuan" untuk
      * setiap tag yang cocok pola tetapi TIDAK mengandung placeholder

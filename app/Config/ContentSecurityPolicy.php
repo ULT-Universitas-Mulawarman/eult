@@ -164,9 +164,21 @@ class ContentSecurityPolicy extends BaseConfig
     /**
      * Lists the URLs for workers and embedded frame contents
      *
+     * Penampil PDF bawaan browser mobile (WebKit/Blink) membungkus PDF
+     * same-origin di dalam sub-frame internal berskema `blob:`/`about:`
+     * (dilaporkan konsol sebagai URL kosong `''`). `'self'` saja menolak
+     * sub-frame itu ("Framing '' violates ... child-src 'self'"),
+     * sehingga pratinjau PDF surat di validitas tampil sebagai konten
+     * terblokir di mobile meski URL iframe-nya sendiri same-origin.
+     * `blob:` hanya dapat dibuat oleh halaman origin ini sendiri dan
+     * `about:` hanya memuat dokumen kosong, jadi keduanya aman dibuka
+     * khusus untuk frame. Disamakan dengan `frameSrc` agar browser
+     * lama yang mengabaikan `frame-src` (fallback `child-src`) ikut
+     * terlayani.
+     *
      * @var list<string>|string
      */
-    public $childSrc = 'self';
+    public $childSrc = ['self', 'blob:', 'about:'];
 
     /**
      * Limits the origins that you can connect to (via XHR,
@@ -219,9 +231,15 @@ class ContentSecurityPolicy extends BaseConfig
      * The frame-src directive restricts the URLs which may
      * be loaded into nested browsing contexts.
      *
+     * Wajib eksplisit: tanpa directive ini browser memakai `child-src`
+     * sebagai fallback, dan nilai `'self'` saja di sana menolak
+     * sub-frame internal penampil PDF mobile (`blob:`/`about:`, tampil
+     * sebagai URL kosong `''` di konsol) — lihat catatan pada
+     * `childSrc`. Tidak membuka domain eksternal apa pun.
+     *
      * @var list<string>|string|null
      */
-    public $frameSrc;
+    public $frameSrc = ['self', 'blob:', 'about:'];
 
     /**
      * Restricts the origins allowed to deliver video and audio.

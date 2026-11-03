@@ -298,22 +298,37 @@ class AdminViewsTest extends CIUnitTestCase
         $this->assertInstanceOf(\DOMElement::class, $copyBtn, 'Tombol #btn-copy-detail harus dirender pada workstation detail tiket.');
         $this->assertStringContainsString('Salin Detail', trim($copyBtn->textContent));
 
+        $copyHtml = $copyBtn->getAttribute('data-copy-html');
+        $this->assertNotEmpty($copyHtml, 'Atribut data-copy-html tidak boleh kosong.');
+        $this->assertStringContainsString('<b>DETAIL TIKET E-ULT</b>', $copyHtml);
+        $this->assertStringContainsString('<b>Nomor Tiket:</b> TK-2026-901', $copyHtml);
+        $this->assertStringContainsString('<b>Nama:</b> Rina Kartika', $copyHtml);
+        $this->assertStringContainsString('<b>No. HP:</b> 081234567890', $copyHtml);
+        $this->assertStringContainsString('<b>Email:</b> rina@unmul.ac.id', $copyHtml);
+        $this->assertStringContainsString('<b>Data MHS:</b> Rina Kartika - 2001015002 - Fakultas Teknik', $copyHtml);
+        $this->assertStringContainsString('<b>Layanan:</b> Legalisir Ijazah (Layanan Akademik)', $copyHtml);
+        $this->assertStringContainsString('<b>Subjek/Judul:</b> Permohonan Legalisir Ijazah S1', $copyHtml);
+        $this->assertStringContainsString('<b>Pesan:</b> Mohon proses legalisir untuk keperluan CPNS.', $copyHtml);
+        $this->assertStringContainsString('<b>Tgl Tiket:</b> 13 September 2026 11:00 WITA', $copyHtml);
+        $this->assertStringContainsString('<b>Status Tiket:</b> Dalam Proses', $copyHtml);
+
         $copyText = $copyBtn->getAttribute('data-copy-text');
         $this->assertNotEmpty($copyText, 'Atribut data-copy-text tidak boleh kosong.');
-        $this->assertStringContainsString('*DETAIL TIKET E-ULT*', $copyText);
-        $this->assertStringContainsString('*Nomor Tiket:* TK-2026-901', $copyText);
-        $this->assertStringContainsString('*Nama:* Rina Kartika', $copyText);
-        $this->assertStringContainsString('*No. HP:* 081234567890', $copyText);
-        $this->assertStringContainsString('*Email:* rina@unmul.ac.id', $copyText);
-        $this->assertStringContainsString('*Data MHS:* Rina Kartika - 2001015002 - Fakultas Teknik', $copyText);
-        $this->assertStringContainsString('*Layanan:* Legalisir Ijazah (Layanan Akademik)', $copyText);
-        $this->assertStringContainsString('*Subjek/Judul:* Permohonan Legalisir Ijazah S1', $copyText);
-        $this->assertStringContainsString('*Pesan:* Mohon proses legalisir untuk keperluan CPNS.', $copyText);
-        $this->assertStringContainsString('*Tgl Tiket:* 13 September 2026 11:00 WITA', $copyText);
-        $this->assertStringContainsString('*Status Tiket:* Dalam Proses', $copyText);
+        $this->assertStringContainsString('DETAIL TIKET E-ULT', $copyText);
+        $this->assertStringContainsString('Nomor Tiket: TK-2026-901', $copyText);
+        $this->assertStringContainsString('Nama: Rina Kartika', $copyText);
+        $this->assertStringContainsString('No. HP: 081234567890', $copyText);
+        $this->assertStringContainsString('Email: rina@unmul.ac.id', $copyText);
+        $this->assertStringContainsString('Data MHS: Rina Kartika - 2001015002 - Fakultas Teknik', $copyText);
+        $this->assertStringContainsString('Layanan: Legalisir Ijazah (Layanan Akademik)', $copyText);
+        $this->assertStringContainsString('Subjek/Judul: Permohonan Legalisir Ijazah S1', $copyText);
+        $this->assertStringContainsString('Pesan: Mohon proses legalisir untuk keperluan CPNS.', $copyText);
+        $this->assertStringContainsString('Tgl Tiket: 13 September 2026 11:00 WITA', $copyText);
+        $this->assertStringContainsString('Status Tiket: Dalam Proses', $copyText);
 
         // Pastikan handler JS clipboard disertakan
         $this->assertStringContainsString('navigator.clipboard', $htmlFull);
+        $this->assertStringContainsString('ClipboardItem', $htmlFull);
         $this->assertStringContainsString('Tersalin', $htmlFull);
 
         // Pastikan tata letak banner ringkasan tiket memiliki jarak vertikal & horizontal (gap: 14px 24px)
@@ -353,10 +368,15 @@ class AdminViewsTest extends CIUnitTestCase
         $copyBtnFallback = $xpathFallback->query('//*[@id="btn-copy-detail"]')->item(0);
         $this->assertInstanceOf(\DOMElement::class, $copyBtnFallback);
 
+        $copyHtmlFallback = $copyBtnFallback->getAttribute('data-copy-html');
+        $this->assertStringContainsString('<b>Data MHS:</b> -', $copyHtmlFallback);
+        $this->assertStringContainsString('<b>Pesan:</b> -', $copyHtmlFallback);
+        $this->assertStringContainsString('<b>Layanan:</b> Informasi Umum', $copyHtmlFallback);
+
         $copyTextFallback = $copyBtnFallback->getAttribute('data-copy-text');
-        $this->assertStringContainsString('*Data MHS:* -', $copyTextFallback);
-        $this->assertStringContainsString('*Pesan:* -', $copyTextFallback);
-        $this->assertStringContainsString('*Layanan:* Informasi Umum', $copyTextFallback);
+        $this->assertStringContainsString('Data MHS: -', $copyTextFallback);
+        $this->assertStringContainsString('Pesan: -', $copyTextFallback);
+        $this->assertStringContainsString('Layanan: Informasi Umum', $copyTextFallback);
     }
 
     public function testValidasifileViewRendersSecurityCardsAndManifestTable(): void

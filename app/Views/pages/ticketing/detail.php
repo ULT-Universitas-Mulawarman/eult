@@ -75,22 +75,37 @@ $workerItems  = $worker ?? [];
 $fileItems    = $files ?? [];
 $dataMhs      = $mhs ?? false;
 
-// Penyusunan teks salin detail tiket (10 atribut utama dengan format bold WhatsApp/Telegram)
+// Penyusunan detail tiket multi-format (HTML dengan tag <b> dan Plain Text polos)
 $layananLabel = $subKategori . (!empty($kategoriNama) && $kategoriNama !== '-' ? ' (' . $kategoriNama . ')' : '');
 $mhsLabel     = ($dataMhs !== false && trim((string) $dataMhs) !== '') ? trim((string) $dataMhs) : '-';
 $pesanLabel   = trim((string) $pesan) !== '' ? trim((string) $pesan) : '-';
+
+$copyDetailHtml = implode("<br>\n", [
+    '<b>DETAIL TIKET E-ULT</b>',
+    '<b>Nomor Tiket:</b> ' . esc($trackingId, 'html'),
+    '<b>Nama:</b> ' . esc($namaPemohon, 'html'),
+    '<b>No. HP:</b> ' . esc($telepon, 'html'),
+    '<b>Email:</b> ' . esc($email, 'html'),
+    '<b>Data MHS:</b> ' . esc($mhsLabel, 'html'),
+    '<b>Layanan:</b> ' . esc($layananLabel, 'html'),
+    '<b>Subjek/Judul:</b> ' . esc($subjek, 'html'),
+    '<b>Pesan:</b> ' . esc($pesanLabel, 'html'),
+    '<b>Tgl Tiket:</b> ' . esc($tglFormatted . ' ' . $jamFormatted . ' WITA', 'html'),
+    '<b>Status Tiket:</b> ' . esc($statusNama, 'html'),
+]);
+
 $copyDetailText = implode("\n", [
-    '*DETAIL TIKET E-ULT*',
-    '*Nomor Tiket:* ' . $trackingId,
-    '*Nama:* ' . $namaPemohon,
-    '*No. HP:* ' . $telepon,
-    '*Email:* ' . $email,
-    '*Data MHS:* ' . $mhsLabel,
-    '*Layanan:* ' . $layananLabel,
-    '*Subjek/Judul:* ' . $subjek,
-    '*Pesan:* ' . $pesanLabel,
-    '*Tgl Tiket:* ' . $tglFormatted . ' ' . $jamFormatted . ' WITA',
-    '*Status Tiket:* ' . $statusNama,
+    'DETAIL TIKET E-ULT',
+    'Nomor Tiket: ' . $trackingId,
+    'Nama: ' . $namaPemohon,
+    'No. HP: ' . $telepon,
+    'Email: ' . $email,
+    'Data MHS: ' . $mhsLabel,
+    'Layanan: ' . $layananLabel,
+    'Subjek/Judul: ' . $subjek,
+    'Pesan: ' . $pesanLabel,
+    'Tgl Tiket: ' . $tglFormatted . ' ' . $jamFormatted . ' WITA',
+    'Status Tiket: ' . $statusNama,
 ]);
 
 // Kumpulan dokumen persyaratan & lampiran
@@ -168,7 +183,7 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                         </div>
                     </div>
                     <div class="d-flex align-items-center flex-wrap" style="gap: 8px; flex-shrink: 0;">
-                        <button type="button" id="btn-copy-detail" class="btn btn-sm btn-secondary font-weight-bold" data-copy-text="<?= esc($copyDetailText, 'attr') ?>" title="Salin rincian tiket ke clipboard">
+                        <button type="button" id="btn-copy-detail" class="btn btn-sm btn-secondary font-weight-bold" data-copy-html="<?= esc($copyDetailHtml, 'attr') ?>" data-copy-text="<?= esc($copyDetailText, 'attr') ?>" title="Salin rincian tiket ke clipboard">
                             <i class="la la-copy mr-1"></i> <span>Salin Detail</span>
                         </button>
                         <?php if (!empty($cetakTerima) && $cetakTerima !== '#'): ?>
@@ -590,11 +605,12 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
 
 <script {csp-script-nonce}>
 document.addEventListener('DOMContentLoaded', function () {
-    // Penanganan klik tombol salin detail tiket ke clipboard
+    // Penanganan klik tombol salin detail tiket ke clipboard (multi-format HTML + Plain Text)
     $('#btn-copy-detail').on('click', function () {
         var $btn = $(this);
-        var teks = $btn.attr('data-copy-text') || '';
-        if (!teks) {
+        var copyHtml = $btn.attr('data-copy-html') || '';
+        var copyText = $btn.attr('data-copy-text') || '';
+        if (!copyText && !copyHtml) {
             return;
         }
 
@@ -627,14 +643,47 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         };
 
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-            navigator.clipboard.writeText(teks).then(function () {
+        if (navigator.clipboard && window.ClipboardItem && copyHtml) {
+            try {
+                var blobHtml = new Blob([copyHtml], { type: 'text/html' });
+                var blobText = new Blob([copyText], { type: 'text/plain' });
+                var item = new ClipboardItem({
+                    'text/html': blobHtml,
+                    'text/plain': blobText
+                });
+
+                navigator.clipboard.write([item]).then(function () {
+                    tampilkanStatusTersalin();
+                }).catch(function () {
+                    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                        navigator.clipboard.writeText(copyText).then(function () {
+                            tampilkanStatusTersalin();
+                        }).catch(function () {
+                            salinFallback(copyText);
+                        });
+                    } else {
+                        salinFallback(copyText);
+                    }
+                });
+            } catch (e) {
+                if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                    navigator.clipboard.writeText(copyText).then(function () {
+                        tampilkanStatusTersalin();
+                    }).catch(function () {
+                        salinFallback(copyText);
+                    });
+                } else {
+                    salinFallback(copyText);
+                }
+            }
+        } else if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(copyText).then(function () {
                 tampilkanStatusTersalin();
             }).catch(function () {
-                salinFallback(teks);
+                salinFallback(copyText);
             });
         } else {
-            salinFallback(teks);
+            salinFallback(copyText);
         }
     });
 

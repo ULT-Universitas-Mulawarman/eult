@@ -30,7 +30,7 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
         );
 
         $posisiPembungkus = strpos($isi, 'd-none d-lg-block');
-        $posisiIframe     = strpos($isi, '<iframe src="<?= esc($loadpdf_url');
+        $posisiIframe     = strpos($isi, '<iframe id="iframe-pratinjau-pdf" data-pdf-url="<?= esc($loadpdf_url');
 
         self::assertNotFalse($posisiPembungkus, 'Iframe pratinjau SHALL dibungkus kelas yang menyembunyikannya di layar kecil.');
         self::assertNotFalse($posisiIframe, 'Iframe pratinjau PDF desktop SHALL tetap ada.');
@@ -38,6 +38,16 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
             $posisiIframe,
             $posisiPembungkus,
             'Pembungkus d-none d-lg-block SHALL mendahului iframe agar iframe hanya tampil di layar besar.'
+        );
+        self::assertStringContainsString(
+            "window.matchMedia('(min-width: 992px)')",
+            $isi,
+            'URL iframe SHALL hanya dipasang pada layar besar agar di mobile tidak ada request frame yang ditolak frame-src.'
+        );
+        self::assertStringNotContainsString(
+            '<iframe src=',
+            $isi,
+            'Iframe SHALL tidak membawa src sejak awal; src dipasang skrip hanya pada layar besar.'
         );
     }
 }

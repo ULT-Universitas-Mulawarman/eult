@@ -183,8 +183,17 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     </div>
                                                     <!-- Pratinjau ter-embed hanya untuk layar besar; di mobile penampil PDF bawaan browser menolak sub-frame internalnya (konsol: Framing '' violates frame-src) sehingga yang tampil hanya placeholder terblokir. -->
                                                     <div class="d-none d-lg-block">
-                                                        <iframe src="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600" title="Pratinjau surat PDF"></iframe>
+                                                        <iframe id="iframe-pratinjau-pdf" data-pdf-url="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600" title="Pratinjau surat PDF"></iframe>
                                                     </div>
+                                                    <script {csp-script-nonce}>
+                                                        // Iframe tanpa src tidak pernah membuat frame, jadi di mobile tidak ada request yang ditolak frame-src. URL baru dipasang pada layar besar.
+                                                        (function () {
+                                                            var bingkai = document.getElementById('iframe-pratinjau-pdf');
+                                                            if (bingkai && window.matchMedia('(min-width: 992px)').matches) {
+                                                                bingkai.src = bingkai.getAttribute('data-pdf-url');
+                                                            }
+                                                        })();
+                                                    </script>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>

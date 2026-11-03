@@ -75,6 +75,24 @@ $workerItems  = $worker ?? [];
 $fileItems    = $files ?? [];
 $dataMhs      = $mhs ?? false;
 
+// Penyusunan teks salin detail tiket (10 atribut utama)
+$layananLabel = $subKategori . (!empty($kategoriNama) && $kategoriNama !== '-' ? ' (' . $kategoriNama . ')' : '');
+$mhsLabel     = ($dataMhs !== false && trim((string) $dataMhs) !== '') ? trim((string) $dataMhs) : '-';
+$pesanLabel   = trim((string) $pesan) !== '' ? trim((string) $pesan) : '-';
+$copyDetailText = implode("\n", [
+    'DETAIL TIKET E-ULT',
+    'Nomor Tiket : ' . $trackingId,
+    'Nama        : ' . $namaPemohon,
+    'No. HP      : ' . $telepon,
+    'Email       : ' . $email,
+    'Data MHS    : ' . $mhsLabel,
+    'Layanan     : ' . $layananLabel,
+    'Subjek/Judul: ' . $subjek,
+    'Pesan       : ' . $pesanLabel,
+    'Tgl Tiket   : ' . $tglFormatted . ' ' . $jamFormatted . ' WITA',
+    'Status Tiket: ' . $statusNama,
+]);
+
 // Kumpulan dokumen persyaratan & lampiran
 $dokumenList = [];
 if (!empty($archiveUrl) && $archiveUrl !== false) {
@@ -151,6 +169,9 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                     </div>
                 </div>
                 <div class="d-flex align-items-center" style="gap: 8px;">
+                    <button type="button" id="btn-copy-detail" class="btn btn-sm btn-secondary font-weight-bold" data-copy-text="<?= esc($copyDetailText, 'attr') ?>" title="Salin rincian tiket ke clipboard">
+                        <i class="la la-copy mr-1"></i> <span>Salin Detail</span>
+                    </button>
                     <?php if (!empty($cetakTerima) && $cetakTerima !== '#'): ?>
                         <a href="<?= esc($cetakTerima) ?>" target="_blank" class="btn btn-sm btn-secondary font-weight-bold">
                             <i class="la la-print mr-1"></i> Cetak Bukti
@@ -569,6 +590,52 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
 
 <script {csp-script-nonce}>
 document.addEventListener('DOMContentLoaded', function () {
+    // Penanganan klik tombol salin detail tiket ke clipboard
+    $('#btn-copy-detail').on('click', function () {
+        var $btn = $(this);
+        var teks = $btn.attr('data-copy-text') || '';
+        if (!teks) {
+            return;
+        }
+
+        var tampilkanStatusTersalin = function () {
+            var $icon = $btn.find('i');
+            var $label = $btn.find('span');
+            $icon.removeClass('la-copy').addClass('la-check text-success');
+            $label.text('Tersalin');
+            setTimeout(function () {
+                $icon.removeClass('la-check text-success').addClass('la-copy');
+                $label.text('Salin Detail');
+            }, 1800);
+        };
+
+        var salinFallback = function (isi) {
+            var textarea = document.createElement('textarea');
+            textarea.value = isi;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                tampilkanStatusTersalin();
+            } finally {
+                document.body.removeChild(textarea);
+            }
+        };
+
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(teks).then(function () {
+                tampilkanStatusTersalin();
+            }).catch(function () {
+                salinFallback(teks);
+            });
+        } else {
+            salinFallback(teks);
+        }
+    });
+
     // Penanganan klik pratinjau dokumen modal
     $('.btn-preview-doc').on('click', function (e) {
         e.preventDefault();

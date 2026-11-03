@@ -256,6 +256,103 @@ class AdminViewsTest extends CIUnitTestCase
         $this->assertStringContainsString('modal-action-dialog', $html);
     }
 
+    /**
+     * Memastikan tombol Salin Detail (#btn-copy-detail) merender ke-10 atribut tiket beserta fallback nilai kosong.
+     */
+    public function testTicketDetailWorkstationRendersCopyDetailButtonWithAllTenFields(): void
+    {
+        $renderer = service('renderer');
+
+        // 1. Skenario data lengkap (termasuk mhs dan ticketMessage)
+        $renderer->resetData();
+        $htmlFull = $renderer->setData([
+            'page_judul' => 'Rincian Permohonan Tiket',
+            'datas' => [
+                'ticketTrackingId' => 'TK-2026-901',
+                'ticketName' => 'Rina Kartika',
+                'ticketEmail' => 'rina@unmul.ac.id',
+                'ticketNoHp' => '081234567890',
+                'ticketAddress' => 'Samarinda',
+                'ticketCreated' => '2026-09-13 11:00:00',
+                'ticketSubject' => 'Permohonan Legalisir Ijazah S1',
+                'ticketMessage' => 'Mohon proses legalisir untuk keperluan CPNS.',
+                'ticketStatus' => 3,
+                'statusNama' => 'Dalam Proses',
+                'statusColor' => 'info',
+                'categoryNama' => 'Layanan Akademik',
+                'sCatNama' => 'Legalisir Ijazah',
+                'unitNama' => 'Biro Akademik',
+            ],
+            'mhs' => 'Rina Kartika - 2001015002 - Fakultas Teknik',
+            'user_group' => ['susrSgroupNama' => 'ADMIN', 'susrProfil' => 'Admin Layanan'],
+        ])->render('pages/ticketing/detail');
+
+        $dom = new \DOMDocument();
+        $previousLibxmlState = libxml_use_internal_errors(true);
+        $dom->loadHTML($htmlFull);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlState);
+        $xpath = new \DOMXPath($dom);
+
+        $copyBtn = $xpath->query('//*[@id="btn-copy-detail"]')->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $copyBtn, 'Tombol #btn-copy-detail harus dirender pada workstation detail tiket.');
+        $this->assertStringContainsString('Salin Detail', trim($copyBtn->textContent));
+
+        $copyText = $copyBtn->getAttribute('data-copy-text');
+        $this->assertNotEmpty($copyText, 'Atribut data-copy-text tidak boleh kosong.');
+        $this->assertStringContainsString('DETAIL TIKET E-ULT', $copyText);
+        $this->assertStringContainsString('Nomor Tiket : TK-2026-901', $copyText);
+        $this->assertStringContainsString('Nama        : Rina Kartika', $copyText);
+        $this->assertStringContainsString('No. HP      : 081234567890', $copyText);
+        $this->assertStringContainsString('Email       : rina@unmul.ac.id', $copyText);
+        $this->assertStringContainsString('Data MHS    : Rina Kartika - 2001015002 - Fakultas Teknik', $copyText);
+        $this->assertStringContainsString('Layanan     : Legalisir Ijazah (Layanan Akademik)', $copyText);
+        $this->assertStringContainsString('Subjek/Judul: Permohonan Legalisir Ijazah S1', $copyText);
+        $this->assertStringContainsString('Pesan       : Mohon proses legalisir untuk keperluan CPNS.', $copyText);
+        $this->assertStringContainsString('Tgl Tiket   : 13 September 2026 11:00 WITA', $copyText);
+        $this->assertStringContainsString('Status Tiket: Dalam Proses', $copyText);
+
+        // Pastikan handler JS clipboard disertakan
+        $this->assertStringContainsString('navigator.clipboard', $htmlFull);
+        $this->assertStringContainsString('Tersalin', $htmlFull);
+
+        // 2. Skenario fallback ketika mhs bernilai false dan ticketMessage kosong
+        $renderer->resetData();
+        $htmlFallback = $renderer->setData([
+            'page_judul' => 'Rincian Permohonan Tiket',
+            'datas' => [
+                'ticketTrackingId' => 'TK-2026-902',
+                'ticketName' => 'Andi Wijaya',
+                'ticketEmail' => 'andi@unmul.ac.id',
+                'ticketPhone' => '081199887766',
+                'ticketCreated' => '2026-09-13 14:30:00',
+                'ticketSubject' => 'Permohonan Informasi Umum',
+                'ticketMessage' => '   ',
+                'ticketStatus' => 1,
+                'statusNama' => 'Baru',
+                'categoryNama' => '-',
+                'sCatNama' => 'Informasi Umum',
+            ],
+            'mhs' => false,
+            'user_group' => ['susrSgroupNama' => 'ADMIN'],
+        ])->render('pages/ticketing/detail');
+
+        $domFallback = new \DOMDocument();
+        $previousLibxmlState = libxml_use_internal_errors(true);
+        $domFallback->loadHTML($htmlFallback);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousLibxmlState);
+        $xpathFallback = new \DOMXPath($domFallback);
+
+        $copyBtnFallback = $xpathFallback->query('//*[@id="btn-copy-detail"]')->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $copyBtnFallback);
+
+        $copyTextFallback = $copyBtnFallback->getAttribute('data-copy-text');
+        $this->assertStringContainsString('Data MHS    : -', $copyTextFallback);
+        $this->assertStringContainsString('Pesan       : -', $copyTextFallback);
+        $this->assertStringContainsString("Layanan     : Informasi Umum\n", $copyTextFallback);
+    }
+
     public function testValidasifileViewRendersSecurityCardsAndManifestTable(): void
     {
         $renderer = service('renderer');

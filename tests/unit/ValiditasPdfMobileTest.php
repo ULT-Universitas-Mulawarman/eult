@@ -51,6 +51,18 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
         );
     }
 
+    public function testBannerSegelTerverifikasiDanProgresHalamanMobile(): void
+    {
+        $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');
+
+        self::assertStringContainsString('Surat Terverifikasi', $isi, 'Hasil validasi berhasil SHALL ditegaskan lewat banner terverifikasi.');
+        self::assertStringContainsString('class="segel-lingkaran"', $isi, 'Segel verifikasi SHALL berupa SVG garis yang dapat digambar animasinya.');
+        self::assertStringContainsString('class="segel-centang"', $isi, 'Segel verifikasi SHALL memuat centang SVG.');
+        self::assertStringContainsString('prefers-reduced-motion', $isi, 'Animasi segel dan halaman SHALL menghormati prefers-reduced-motion.');
+        self::assertStringContainsString("'Memuat halaman ' + nomor + ' dari ' + pdf.numPages", $isi, 'Pemuatan PDF mobile SHALL melaporkan progres per halaman secara jujur.');
+        self::assertStringContainsString('halaman-pdf-masuk', $isi, 'Kanvas halaman SHALL memakai kelas transisi masuk.');
+    }
+
     public function testPenampilPdfMobileMerenderKeCanvasDenganPdfJsSelfHosted(): void
     {
         $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');

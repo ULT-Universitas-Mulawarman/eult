@@ -31,6 +31,20 @@ License: You must have a valid license purchased only from themeforest(the above
         <!--begin::Layout Themes(used by all pages)-->
         <!--end::Layout Themes-->
         <link rel="shortcut icon" href="<?= base_url('assets_val/media/logos/favicon.ico') ?>" />
+        <style {csp-style-nonce}>
+            .segel-verifikasi { flex: none; }
+            .segel-verifikasi .segel-lingkaran { stroke-dasharray: 151; stroke-dashoffset: 0; animation: segel-lingkaran 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+            .segel-verifikasi .segel-centang { stroke-dasharray: 36; stroke-dashoffset: 0; animation: segel-centang 0.35s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both; }
+            @keyframes segel-lingkaran { from { stroke-dashoffset: 151; } to { stroke-dashoffset: 0; } }
+            @keyframes segel-centang { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
+            .halaman-pdf-masuk { animation: halaman-pdf-masuk 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+            @keyframes halaman-pdf-masuk { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            @media (prefers-reduced-motion: reduce) {
+                .segel-verifikasi .segel-lingkaran, .segel-verifikasi .segel-centang { animation: none; }
+                .halaman-pdf-masuk { animation-duration: 0.01s; }
+                @keyframes halaman-pdf-masuk { from { opacity: 0; transform: none; } to { opacity: 1; transform: none; } }
+            }
+        </style>
     </head>
     <!--end::Head-->
     <!--begin::Body-->
@@ -128,9 +142,19 @@ License: You must have a valid license purchased only from themeforest(the above
                                                 <div class="col-lg-12">                         
                                                     <?php if ($datas == false): ?>
                                                         <div class="alert alert-danger" role="alert">
-                                                            Surat tidak ditemukan. Kunci validasi tidak valid atau sudah tidak berlaku.
+                                                            Surat tidak ditemukan. Kunci validasi tidak valid atau sudah tidak berlaku. Pindai ulang kode QR pada surat cetak; bila tetap gagal, hubungi Unit Layanan Terpadu Universitas Mulawarman.
                                                         </div>
                                                     <?php else: ?>
+                                                    <div class="d-flex align-items-center mb-4 p-3" style="background: rgba(10, 187, 135, 0.08); border: 1px solid #ebedf2; border-radius: 4px;">
+                                                        <svg class="segel-verifikasi mr-3" width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true" focusable="false">
+                                                            <circle class="segel-lingkaran" cx="24" cy="24" r="22" stroke="#0abb87" stroke-width="2.5" transform="rotate(-90 24 24)" pathLength="151" stroke-dasharray="151" />
+                                                            <path class="segel-centang" d="M15 24.5 L21.5 31 L33 18" stroke="#0abb87" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" pathLength="36" stroke-dasharray="36" />
+                                                        </svg>
+                                                        <div>
+                                                            <div class="font-weight-bold text-dark" style="font-size: 1rem; line-height: 1.3;">Surat Terverifikasi</div>
+                                                            <div class="small" style="color: #646c9a;">Hasil pindai kode QR ini cocok dengan arsip digital Unit Layanan Terpadu Universitas Mulawarman.</div>
+                                                        </div>
+                                                    </div>
                                                     <table border="0" width="60%">
                                                     <tr>
                                                         <td>NIM/NIP</td>
@@ -216,6 +240,9 @@ License: You must have a valid license purchased only from themeforest(the above
                                                                 window.pdfjsLib.GlobalWorkerOptions.workerSrc = <?= json_encode(eult_url_aset('assets_val/js/pdfjs/pdf.worker.min.js')); ?>;
                                                                 window.pdfjsLib.getDocument({ url: urlPdf }).promise.then(function (pdf) {
                                                                     function renderHalaman(nomor) {
+                                                                        if (status && nomor <= pdf.numPages) {
+                                                                            status.textContent = 'Memuat halaman ' + nomor + ' dari ' + pdf.numPages + '...';
+                                                                        }
                                                                         if (nomor > pdf.numPages) {
                                                                             if (status) {
                                                                                 status.textContent = 'Pratinjau surat (' + pdf.numPages + ' halaman). Gunakan tombol di atas untuk membuka ukuran penuh.';
@@ -228,6 +255,7 @@ License: You must have a valid license purchased only from themeforest(the above
                                                                             var rasio = Math.min(window.devicePixelRatio || 1, 2);
                                                                             var viewport = halaman.getViewport({ scale: skala * rasio });
                                                                             var kanvas = document.createElement('canvas');
+                                                                            kanvas.className = 'halaman-pdf-masuk';
                                                                             kanvas.width = viewport.width;
                                                                             kanvas.height = viewport.height;
                                                                             kanvas.style.width = '100%';

@@ -75,22 +75,22 @@ $workerItems  = $worker ?? [];
 $fileItems    = $files ?? [];
 $dataMhs      = $mhs ?? false;
 
-// Penyusunan teks salin detail tiket (10 atribut utama)
+// Penyusunan teks salin detail tiket (10 atribut utama dengan format bold WhatsApp/Telegram)
 $layananLabel = $subKategori . (!empty($kategoriNama) && $kategoriNama !== '-' ? ' (' . $kategoriNama . ')' : '');
 $mhsLabel     = ($dataMhs !== false && trim((string) $dataMhs) !== '') ? trim((string) $dataMhs) : '-';
 $pesanLabel   = trim((string) $pesan) !== '' ? trim((string) $pesan) : '-';
 $copyDetailText = implode("\n", [
-    'DETAIL TIKET E-ULT',
-    'Nomor Tiket : ' . $trackingId,
-    'Nama        : ' . $namaPemohon,
-    'No. HP      : ' . $telepon,
-    'Email       : ' . $email,
-    'Data MHS    : ' . $mhsLabel,
-    'Layanan     : ' . $layananLabel,
-    'Subjek/Judul: ' . $subjek,
-    'Pesan       : ' . $pesanLabel,
-    'Tgl Tiket   : ' . $tglFormatted . ' ' . $jamFormatted . ' WITA',
-    'Status Tiket: ' . $statusNama,
+    '*DETAIL TIKET E-ULT*',
+    '*Nomor Tiket:* ' . $trackingId,
+    '*Nama:* ' . $namaPemohon,
+    '*No. HP:* ' . $telepon,
+    '*Email:* ' . $email,
+    '*Data MHS:* ' . $mhsLabel,
+    '*Layanan:* ' . $layananLabel,
+    '*Subjek/Judul:* ' . $subjek,
+    '*Pesan:* ' . $pesanLabel,
+    '*Tgl Tiket:* ' . $tglFormatted . ' ' . $jamFormatted . ' WITA',
+    '*Status Tiket:* ' . $statusNama,
 ]);
 
 // Kumpulan dokumen persyaratan & lampiran

@@ -12,7 +12,7 @@ Purchase: https://1.envato.market/EA4JP
 Renew Support: https://1.envato.market/EA4JP
 License: You must have a valid license purchased only from themeforest(the above link) in order to legally use the theme for your project.
 -->
-<html lang="en">
+<html lang="id">
     <!--begin::Head-->
     <head><base href="../../../">
         <meta charset="utf-8" />
@@ -39,6 +39,20 @@ License: You must have a valid license purchased only from themeforest(the above
             @keyframes segel-centang { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
             .halaman-pdf-masuk { animation: halaman-pdf-masuk 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
             @keyframes halaman-pdf-masuk { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            .tabel-validasi td { vertical-align: top; padding: 2px 6px 2px 0; overflow-wrap: anywhere; }
+            a:focus-visible, button:focus-visible { outline: 2px solid #5d78ff; outline-offset: 2px; }
+            @media (max-width: 767.98px) {
+                .card-header .card-title { font-size: 1rem; line-height: 1.35; white-space: normal; padding-right: 8px; }
+                .card-header .ribbon-target { display: none; }
+                .tabel-validasi, .tabel-validasi tbody, .tabel-validasi tr, .tabel-validasi td { display: block; width: 100%; }
+                .tabel-validasi tr { margin-bottom: 10px; }
+                .tabel-validasi td { padding: 0; }
+                .tabel-validasi td:first-child { color: #646c9a; font-size: 12px; font-weight: 500; line-height: 1.3; }
+                .tabel-validasi td:nth-child(2) { display: none; }
+                .tabel-validasi td:last-child { color: #48465b; font-weight: 500; }
+                .tombol-buka-pdf { display: block; width: 100%; padding-top: 0.75rem; padding-bottom: 0.75rem; font-size: 13px; }
+                .petunjuk-buka-pdf { display: block; margin: 8px 0 0; }
+            }
             @media (prefers-reduced-motion: reduce) {
                 .segel-verifikasi .segel-lingkaran, .segel-verifikasi .segel-centang { animation: none; }
                 .halaman-pdf-masuk { animation-duration: 0.01s; }
@@ -155,7 +169,7 @@ License: You must have a valid license purchased only from themeforest(the above
                                                             <div class="small" style="color: #646c9a;">Hasil pindai kode QR ini cocok dengan arsip digital Unit Layanan Terpadu Universitas Mulawarman.</div>
                                                         </div>
                                                     </div>
-                                                    <table border="0" width="60%">
+                                                    <table class="tabel-validasi" border="0" width="60%">
                                                     <tr>
                                                         <td>NIM/NIP</td>
                                                         <td>:</td>
@@ -202,8 +216,8 @@ License: You must have a valid license purchased only from themeforest(the above
 
                                                     <!-- Navigasi top-level TIDAK diatur frame-src/child-src, jadi tautan ini jalan di mobile meski pratinjau ter-embed diblokir penampil PDF bawaan browser. -->
                                                     <div class="mb-3">
-                                                        <a href="<?= esc($loadpdf_url ?? '') ?>" target="_blank" rel="noopener" class="btn btn-light-primary btn-sm font-weight-bold px-5">Buka Surat PDF di Tab Baru</a>
-                                                        <span class="text-muted small ml-2">Gunakan tombol ini bila pratinjau surat tidak tampil di perangkat mobile.</span>
+                                                        <a href="<?= esc($loadpdf_url ?? '') ?>" target="_blank" rel="noopener" class="btn btn-primary btn-sm font-weight-bold px-5 tombol-buka-pdf">Buka Surat PDF di Tab Baru</a>
+                                                        <span class="text-muted small ml-2 petunjuk-buka-pdf">Gunakan tombol ini bila pratinjau surat tidak tampil di perangkat mobile.</span>
                                                     </div>
                                                     <!-- Pratinjau ter-embed hanya untuk layar besar; di mobile penampil PDF bawaan browser menolak sub-frame internalnya (konsol: Framing '' violates frame-src) sehingga yang tampil hanya placeholder terblokir. -->
                                                     <div class="d-none d-lg-block">
@@ -211,7 +225,7 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     </div>
                                                     <!-- Di mobile PDF dirender PDF.js ke canvas (tanpa frame sama sekali), sehingga tetap tampil inline meski penampil PDF bawaan browser terblokir CSP. -->
                                                     <div id="penampil-pdf-mobile" class="d-lg-none">
-                                                        <p id="status-pdf-mobile" class="text-muted small mb-2">Memuat pratinjau surat...</p>
+                                                        <p id="status-pdf-mobile" class="small mb-2" role="status" aria-live="polite" style="color: #646c9a;">Memuat pratinjau surat...</p>
                                                         <div id="daftar-halaman-pdf"></div>
                                                     </div>
                                                     <script {csp-script-nonce}>

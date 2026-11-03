@@ -63,6 +63,19 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
         self::assertStringContainsString('halaman-pdf-masuk', $isi, 'Kanvas halaman SHALL memakai kelas transisi masuk.');
     }
 
+    public function testPolishMobileJudulTabelTombolDanStatusDapatDiakses(): void
+    {
+        $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');
+
+        self::assertStringContainsString('<html lang="id">', $isi, 'Bahasa dokumen SHALL sesuai konten Indonesia.');
+        self::assertStringContainsString('class="tabel-validasi"', $isi, 'Tabel data validasi SHALL memakai kelas responsif khusus.');
+        self::assertStringContainsString('.tabel-validasi td:nth-child(2)', $isi, 'Kolom titik dua SHALL disembunyikan pada susunan bertumpuk mobile.');
+        self::assertStringContainsString('btn btn-primary', $isi, 'Tombol buka PDF SHALL memakai warna aksi primer sistem.');
+        self::assertStringContainsString('tombol-buka-pdf', $isi, 'Tombol buka PDF SHALL memakai kelas target sentuh mobile.');
+        self::assertStringContainsString('aria-live="polite"', $isi, 'Status pemuatan pratinjau SHALL diumumkan pembaca layar.');
+        self::assertStringContainsString('.card-header .ribbon-target', $isi, 'Ribbon dekoratif SHALL diatur agar tidak menabrak judul di mobile.');
+    }
+
     public function testPenampilPdfMobileMerenderKeCanvasDenganPdfJsSelfHosted(): void
     {
         $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');

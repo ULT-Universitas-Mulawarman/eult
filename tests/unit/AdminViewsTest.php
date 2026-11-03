@@ -316,6 +316,12 @@ class AdminViewsTest extends CIUnitTestCase
         $this->assertStringContainsString('navigator.clipboard', $htmlFull);
         $this->assertStringContainsString('Tersalin', $htmlFull);
 
+        // Pastikan tata letak banner ringkasan tiket memiliki jarak vertikal & horizontal (gap: 14px 24px)
+        // dan sejajar di sebelah kanan ikon agar tombol tidak mepet dengan detail saat turun baris
+        $bannerContentWrap = $xpath->query('//*[@id="ticket-banner-content"]')->item(0);
+        $this->assertInstanceOf(\DOMElement::class, $bannerContentWrap, 'Container #ticket-banner-content harus ada untuk mengatur jarak (gap) antara detail dan tombol.');
+        $this->assertStringContainsString('gap: 14px 24px', $bannerContentWrap->getAttribute('style'));
+
         // 2. Skenario fallback ketika mhs bernilai false dan ticketMessage kosong
         $renderer->resetData();
         $htmlFallback = $renderer->setData([

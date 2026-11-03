@@ -139,12 +139,12 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
     <!-- Baris 1: Banner Ringkasan Tiket -->
     <div class="kt-portlet mb-4" style="border-top: 2px solid #5d78ff; box-shadow: 0px 0px 13px 0px rgba(82, 63, 105, 0.05); border-radius: 4px; background: #ffffff;">
         <div class="kt-portlet__body p-4">
-            <div class="d-flex flex-wrap align-items-center justify-content-between">
-                <div class="d-flex align-items-center mb-3 mb-md-0">
-                    <div class="kt-badge kt-badge--unified-brand mr-3" style="width: 52px; height: 52px; border-radius: 6px; font-size: 24px; display: flex; align-items: center; justify-content: center;">
-                        <i class="flaticon2-document text-primary" style="font-size: 22px;"></i>
-                    </div>
-                    <div>
+            <div class="d-flex align-items-start">
+                <div class="kt-badge kt-badge--unified-brand mr-3 flex-shrink-0" style="width: 52px; height: 52px; border-radius: 6px; font-size: 24px; display: flex; align-items: center; justify-content: center;">
+                    <i class="flaticon2-document text-primary" style="font-size: 22px;"></i>
+                </div>
+                <div id="ticket-banner-content" class="d-flex flex-wrap align-items-center justify-content-between flex-grow-1" style="min-width: 0; gap: 14px 24px;">
+                    <div style="flex: 1 1 380px; min-width: 0;">
                         <div class="d-flex align-items-center flex-wrap" style="gap: 8px;">
                             <span id="ticketId" class="font-weight-bold" style="font-family: monospace; font-size: 1.35rem; color: #5d78ff; letter-spacing: 0.5px;">
                                 <?= esc($trackingId) ?>
@@ -158,7 +158,7 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                                 </span>
                             <?php endif; ?>
                         </div>
-                        <div class="d-flex align-items-center text-muted mt-2 flex-wrap" style="font-size: 13px; gap: 16px;">
+                        <div class="d-flex align-items-center text-muted mt-2 flex-wrap" style="font-size: 13px; gap: 6px 16px;">
                             <span><i class="la la-user mr-1 text-primary"></i><strong><?= esc($namaPemohon) ?></strong><?= !empty($identitas) ? ' (' . esc($identitas) . ')' : '' ?></span>
                             <span><i class="la la-bookmark mr-1 text-primary"></i><?= esc($subKategori) ?><?= !empty($kategoriNama) && $kategoriNama !== '-' ? ' &bull; ' . esc($kategoriNama) : '' ?></span>
                             <span><i class="la la-calendar mr-1 text-primary"></i><?= esc($tglFormatted) ?> <?= esc($jamFormatted) ?> WITA</span>
@@ -167,21 +167,21 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                             <?php endif; ?>
                         </div>
                     </div>
-                </div>
-                <div class="d-flex align-items-center" style="gap: 8px;">
-                    <button type="button" id="btn-copy-detail" class="btn btn-sm btn-secondary font-weight-bold" data-copy-text="<?= esc($copyDetailText, 'attr') ?>" title="Salin rincian tiket ke clipboard">
-                        <i class="la la-copy mr-1"></i> <span>Salin Detail</span>
-                    </button>
-                    <?php if (!empty($cetakTerima) && $cetakTerima !== '#'): ?>
-                        <a href="<?= esc($cetakTerima) ?>" target="_blank" class="btn btn-sm btn-secondary font-weight-bold">
-                            <i class="la la-print mr-1"></i> Cetak Bukti
-                        </a>
-                    <?php endif; ?>
-                    <?php if (!empty($surveyUrl)): ?>
-                        <a href="<?= esc($surveyUrl) ?>" target="_blank" class="btn btn-sm btn-secondary font-weight-bold">
-                            <i class="la la-pencil mr-1"></i> Survei IKM
-                        </a>
-                    <?php endif; ?>
+                    <div class="d-flex align-items-center flex-wrap" style="gap: 8px; flex-shrink: 0;">
+                        <button type="button" id="btn-copy-detail" class="btn btn-sm btn-secondary font-weight-bold" data-copy-text="<?= esc($copyDetailText, 'attr') ?>" title="Salin rincian tiket ke clipboard">
+                            <i class="la la-copy mr-1"></i> <span>Salin Detail</span>
+                        </button>
+                        <?php if (!empty($cetakTerima) && $cetakTerima !== '#'): ?>
+                            <a href="<?= esc($cetakTerima) ?>" target="_blank" class="btn btn-sm btn-secondary font-weight-bold">
+                                <i class="la la-print mr-1"></i> Cetak Bukti
+                            </a>
+                        <?php endif; ?>
+                        <?php if (!empty($surveyUrl)): ?>
+                            <a href="<?= esc($surveyUrl) ?>" target="_blank" class="btn btn-sm btn-secondary font-weight-bold">
+                                <i class="la la-pencil mr-1"></i> Survei IKM
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
         </div>
@@ -620,6 +620,8 @@ document.addEventListener('DOMContentLoaded', function () {
             try {
                 document.execCommand('copy');
                 tampilkanStatusTersalin();
+            } catch (err) {
+                // Abaikan bila browser memblokir execCommand
             } finally {
                 document.body.removeChild(textarea);
             }

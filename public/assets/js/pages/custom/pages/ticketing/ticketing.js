@@ -999,33 +999,41 @@ const KTTicketing = function () {
             e.preventDefault();
             btnShow.trigger('click');
         });
-        formShow.validate({
-            rules: {
-                layanan: 'required',
-                rentangTanggal: 'required'
-            },
-            messages: {
-                layanan: 'Silakan Pilih Layanan',
-                rentangTanggal: 'Silakan Pilih tanggal'
-            },
-        });
+        // Filter daftar tiket wajib minimal satu: semua kosong ditolak,
+        // tetapi satu filter terisi (rentang tanggal, layanan, status, atau
+        // kata kunci) sudah cukup untuk menyaring data.
+        const filterTerisi = () => {
+            const nilai = [
+                formShow.find('[name="rentangTanggal"]').val(),
+                formShow.find('[name="layanan"]').val(),
+                formShow.find('[name="status_layanan"]').val(),
+                formShow.find('[name="keyword"]').val(),
+            ];
+            return nilai.some(v => (v || '').toString().trim() !== '');
+        };
         btnShow.on('click', e => {
             e.preventDefault();
-            if (formShow.valid()) {
-                $.ajax({
-                    type: formShow.attr('method'),
-                    url: formShow.attr('action'),
-                    data: formShow.serialize(),
-                    success: data => {
-                        $('#response').removeClass('response-hide');
-                        $('#response').html(eultTerimaHtml(data));
-                        KTUtil.animateClass(main_form.find('#response')[0], 'flipInX animated');
-                        $('#response').addClass('response-show');
-                        initHandleWidgets();
-                        handleEvent();
-                    }
+            if (!filterTerisi()) {
+                swal.fire({
+                    title: 'Filter Kosong',
+                    text: 'Silakan isi minimal satu filter (rentang tanggal, layanan, status, atau kata kunci).',
+                    type: 'error'
                 });
+                return;
             }
+            $.ajax({
+                type: formShow.attr('method'),
+                url: formShow.attr('action'),
+                data: formShow.serialize(),
+                success: data => {
+                    $('#response').removeClass('response-hide');
+                    $('#response').html(eultTerimaHtml(data));
+                    KTUtil.animateClass(main_form.find('#response')[0], 'flipInX animated');
+                    $('#response').addClass('response-show');
+                    initHandleWidgets();
+                    handleEvent();
+                }
+            });
         });
         $('.kv-uni-star').on('change', function () {
             // Teks #ticketId mengandung newline + indentasi markup — pangkas

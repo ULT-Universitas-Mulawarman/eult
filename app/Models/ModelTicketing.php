@@ -195,7 +195,7 @@ class ModelTicketing extends ModelMaster
     /**
      * @return array<int, array<string, mixed>>|false
      */
-    public function dataById(array|string $kondisi = '', string $status = ''): array|false
+    public function dataById(array|string $kondisi = '', string $status = '', string $keyword = ''): array|false
     {
         $sub2     = $this->subDisposisiTerakhir();
         $subSurat = $this->subSuratRingkas();
@@ -225,6 +225,12 @@ class ModelTicketing extends ModelMaster
         }
         if ($status !== '') {
             $builder->where('statusId', $status);
+        }
+        if ($keyword !== '') {
+            $builder->groupStart()
+                ->like('ticketTrackingId', $keyword)
+                ->orLike('ticketName', $keyword)
+                ->groupEnd();
         }
 
         $hasil = $builder->get()->getResultArray();
@@ -364,7 +370,7 @@ class ModelTicketing extends ModelMaster
     /**
      * @return array<int, array<string, mixed>>|false
      */
-    public function disposisiAll(array|string $kondisi, string $status = ''): array|false
+    public function disposisiAll(array|string $kondisi, string $status = '', string $keyword = ''): array|false
     {
         $sub2     = $this->subDisposisiTerakhir();
         $subSurat = $this->subSuratRingkas();
@@ -395,6 +401,12 @@ class ModelTicketing extends ModelMaster
 
         if ($status !== '') {
             $builder->where('statusId', $status);
+        }
+        if ($keyword !== '') {
+            $builder->groupStart()
+                ->like('ticketTrackingId', $keyword)
+                ->orLike('ticketName', $keyword)
+                ->groupEnd();
         }
 
         $hasil = $builder->get()->getResultArray();

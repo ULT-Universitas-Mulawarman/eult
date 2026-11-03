@@ -141,33 +141,40 @@ class Ticketing extends BaseController
 
     public function response(): string
     {
-        if (! $this->validate(['rentangTanggal' => 'required'])) {
-            eult_message_kirim('Ooops!! Something Wrong!!', 'error');
-        }
-
         $sesi          = $this->pengguna;
-        $tanggal       = (string) $this->request->getPost('rentangTanggal');
-        $layanan       = (string) $this->request->getPost('layanan');
-        $statusLayanan = (string) ($this->request->getPost('status_layanan') ?? '');
+        $tanggal       = trim((string) ($this->request->getPost('rentangTanggal') ?? ''));
+        $layanan       = trim((string) ($this->request->getPost('layanan') ?? ''));
+        $statusLayanan = trim((string) ($this->request->getPost('status_layanan') ?? ''));
+        $keyword       = trim((string) ($this->request->getPost('keyword') ?? ''));
+
+        // Filter wajib minimal satu: semua kosong ditolak, tetapi satu
+        // filter terisi sudah cukup untuk menyaring data.
+        if ($tanggal === '' && $layanan === '' && $statusLayanan === '' && $keyword === '') {
+            eult_message_kirim('Silakan isi minimal satu filter (rentang tanggal, layanan, status, atau kata kunci).', 'error');
+        }
 
         session()->set('tanggal', $tanggal);
         [$tanggalAwal, $tanggalAkhir] = $this->rentangTanggal($tanggal);
 
-        if ($tanggalAwal === '') {
+        if ($tanggal !== '' && $tanggalAwal === '') {
             eult_message_kirim('Format rentang tanggal tidak dikenali. Pilih ulang periode tanggal.', 'error');
         }
 
-        $kondisi = [
-            'ticketCreated >=' => $tanggalAwal . ' 00:00:00',
-            'ticketCreated <=' => $tanggalAkhir . ' 23:59:59',
-        ];
+        $kondisi = [];
+
+        if ($tanggalAwal !== '') {
+            $kondisi['ticketCreated >='] = $tanggalAwal . ' 00:00:00';
+            $kondisi['ticketCreated <='] = $tanggalAkhir . ' 23:59:59';
+        }
 
         if ($sesi['susrSgroupNama'] === 'ADMIN' || strpos($sesi['susrSgroupNama'], 'OPERATOR') !== false) {
-            $kondisi['runit.unitId'] = $layanan;
-            $datas                   = $this->tiket->dataById($kondisi, $statusLayanan);
+            if ($layanan !== '') {
+                $kondisi['runit.unitId'] = $layanan;
+            }
+            $datas = $this->tiket->dataById($kondisi, $statusLayanan, $keyword);
         } else {
             $kondisi['sgroupunitSgroupNama'] = $sesi['susrSgroupNama'];
-            $datas                           = $this->tiket->disposisiAll($kondisi, $statusLayanan);
+            $datas                           = $this->tiket->disposisiAll($kondisi, $statusLayanan, $keyword);
         }
 
         $data                  = $this->getMaster($this->pathPage . $this->pageIndex);

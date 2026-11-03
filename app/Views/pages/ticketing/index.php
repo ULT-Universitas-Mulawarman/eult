@@ -92,9 +92,9 @@
                                                 <div class="input-group-prepend">
                                                     <span class="input-group-text"><i class="flaticon-search"></i></span>
                                                 </div>
-                                                <input type="text" class="form-control" id="keyword_filter" placeholder="Nomor tracking / nama pemohon...">
+                                                <input type="text" class="form-control" id="keyword_filter" name="keyword" placeholder="Nomor tracking / nama pemohon...">
                                             </div>
-                                            <small class="form-text text-muted">Pencarian instan pada tabel antrean di bawah</small>
+                                            <small class="form-text text-muted">Menyaring instan pada tabel, dan ikut terkirim saat Tampilkan Data diklik</small>
                                         </div>
                                     </div>
                                 </div>

@@ -39,6 +39,13 @@ License: You must have a valid license purchased only from themeforest(the above
             @keyframes segel-centang { from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; } }
             .halaman-pdf-masuk { animation: halaman-pdf-masuk 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
             @keyframes halaman-pdf-masuk { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+            /* Spinner Metronic (kt-spinner) tidak tersedia di bundle assets_val, jadi aturan komponen aslinya disertakan untuk pemutar pratinjau. */
+            .kt-spinner { position: relative; }
+            .kt-spinner:before { content: ""; box-sizing: border-box; position: absolute; top: 50%; left: 0; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%; animation: kt-spinner 0.5s linear infinite; }
+            .kt-spinner.kt-spinner--sm:before { width: 16px; height: 16px; margin-top: -8px; }
+            .kt-spinner.kt-spinner--brand:before { border: 2px solid #5d78ff; border-right: 2px solid transparent; }
+            @keyframes kt-spinner { to { transform: rotate(360deg); } }
+            #pemutar-pdf-mobile, #pemutar-pdf-desktop { display: inline-block; width: 16px; height: 16px; padding-left: 0; vertical-align: -3px; }
             .tabel-validasi td { vertical-align: top; padding: 2px 6px 2px 0; overflow-wrap: anywhere; }
             a:focus-visible, button:focus-visible { outline: 2px solid #5d78ff; outline-offset: 2px; }
             @media (max-width: 767.98px) {
@@ -55,6 +62,7 @@ License: You must have a valid license purchased only from themeforest(the above
             }
             @media (prefers-reduced-motion: reduce) {
                 .segel-verifikasi .segel-lingkaran, .segel-verifikasi .segel-centang { animation: none; }
+                .kt-spinner:before { animation-duration: 1.5s; }
                 .halaman-pdf-masuk { animation-duration: 0.01s; }
                 @keyframes halaman-pdf-masuk { from { opacity: 0; transform: none; } to { opacity: 1; transform: none; } }
             }
@@ -221,11 +229,12 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     </div>
                                                     <!-- Pratinjau ter-embed hanya untuk layar besar; di mobile penampil PDF bawaan browser menolak sub-frame internalnya (konsol: Framing '' violates frame-src) sehingga yang tampil hanya placeholder terblokir. -->
                                                     <div class="d-none d-lg-block">
+                                                        <p id="status-pdf-desktop" class="small mb-2" role="status" aria-live="polite" style="color: #646c9a;"><span id="pemutar-pdf-desktop" class="kt-spinner kt-spinner--sm kt-spinner--brand mr-2"></span>Memuat pratinjau surat...</p>
                                                         <iframe id="iframe-pratinjau-pdf" data-pdf-url="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600" title="Pratinjau surat PDF"></iframe>
                                                     </div>
                                                     <!-- Di mobile PDF dirender PDF.js ke canvas (tanpa frame sama sekali), sehingga tetap tampil inline meski penampil PDF bawaan browser terblokir CSP. -->
                                                     <div id="penampil-pdf-mobile" class="d-lg-none">
-                                                        <p id="status-pdf-mobile" class="small mb-2" role="status" aria-live="polite" style="color: #646c9a;">Memuat pratinjau surat...</p>
+                                                        <p id="status-pdf-mobile" class="small mb-2" role="status" aria-live="polite" style="color: #646c9a;"><span id="pemutar-pdf-mobile" class="kt-spinner kt-spinner--sm kt-spinner--brand mr-2"></span><span id="teks-status-pdf-mobile">Memuat pratinjau surat...</span></p>
                                                         <div id="daftar-halaman-pdf"></div>
                                                     </div>
                                                     <script {csp-script-nonce}>
@@ -237,12 +246,22 @@ License: You must have a valid license purchased only from themeforest(the above
                                                             var urlPdf = bingkai.getAttribute('data-pdf-url');
                                                             // Iframe tanpa src tidak pernah membuat frame, jadi di mobile tidak ada request yang ditolak frame-src. URL baru dipasang pada layar besar.
                                                             if (window.matchMedia('(min-width: 992px)').matches) {
+                                                                var statusDesktop = document.getElementById('status-pdf-desktop');
+                                                                bingkai.addEventListener('load', function () {
+                                                                    if (statusDesktop) {
+                                                                        statusDesktop.style.display = 'none';
+                                                                    }
+                                                                });
                                                                 bingkai.src = urlPdf;
                                                                 return;
                                                             }
-                                                            var status = document.getElementById('status-pdf-mobile');
+                                                            var status = document.getElementById('teks-status-pdf-mobile');
+                                                            var pemutarMobile = document.getElementById('pemutar-pdf-mobile');
                                                             var daftar = document.getElementById('daftar-halaman-pdf');
                                                             function gagal() {
+                                                                if (pemutarMobile) {
+                                                                    pemutarMobile.style.display = 'none';
+                                                                }
                                                                 if (status) {
                                                                     status.textContent = 'Pratinjau tidak dapat dimuat. Gunakan tombol Buka Surat PDF di Tab Baru di atas.';
                                                                 }
@@ -258,6 +277,9 @@ License: You must have a valid license purchased only from themeforest(the above
                                                                             status.textContent = 'Memuat halaman ' + nomor + ' dari ' + pdf.numPages + '...';
                                                                         }
                                                                         if (nomor > pdf.numPages) {
+                                                                            if (pemutarMobile) {
+                                                                                pemutarMobile.style.display = 'none';
+                                                                            }
                                                                             if (status) {
                                                                                 status.textContent = 'Pratinjau surat (' + pdf.numPages + ' halaman). Gunakan tombol di atas untuk membuka ukuran penuh.';
                                                                             }

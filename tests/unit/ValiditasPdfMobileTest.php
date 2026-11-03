@@ -76,6 +76,19 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
         self::assertStringContainsString('.card-header .ribbon-target', $isi, 'Ribbon dekoratif SHALL diatur agar tidak menabrak judul di mobile.');
     }
 
+    public function testPemuatanPdfMemakaiSpinnerMetronic(): void
+    {
+        $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');
+
+        self::assertStringContainsString('id="pemutar-pdf-mobile" class="kt-spinner kt-spinner--sm kt-spinner--brand', $isi, 'Pemuatan PDF mobile SHALL memakai spinner Metronic.');
+        self::assertStringContainsString('id="pemutar-pdf-desktop" class="kt-spinner kt-spinner--sm kt-spinner--brand', $isi, 'Pemuatan PDF desktop SHALL memakai spinner Metronic.');
+        self::assertStringContainsString('id="teks-status-pdf-mobile"', $isi, 'Teks status SHALL terpisah dari elemen spinner agar tidak ikut terhapus saat diperbarui.');
+        self::assertStringContainsString("pemutarMobile.style.display = 'none'", $isi, 'Spinner mobile SHALL disembunyikan setelah render selesai atau gagal.');
+        self::assertStringContainsString("statusDesktop.style.display = 'none'", $isi, 'Spinner desktop SHALL disembunyikan setelah iframe selesai dimuat.');
+        self::assertStringContainsString('.kt-spinner.kt-spinner--brand:before', $isi, 'Aturan komponen spinner Metronic SHALL tersedia di halaman karena bundle assets_val tidak memuatnya.');
+        self::assertStringContainsString('@keyframes kt-spinner', $isi, 'Keyframes putaran spinner Metronic SHALL tersedia.');
+    }
+
     public function testPenampilPdfMobileMerenderKeCanvasDenganPdfJsSelfHosted(): void
     {
         $isi = (string) file_get_contents(APPPATH . 'Views/pages/validitas/index.php');
@@ -93,3 +106,4 @@ final class ValiditasPdfMobileTest extends CIUnitTestCase
         }
     }
 }
+

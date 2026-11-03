@@ -176,7 +176,15 @@ License: You must have a valid license purchased only from themeforest(the above
                                                     
                                                     <hr>
 
-                                                    <iframe src="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600"></iframe>
+                                                    <!-- Navigasi top-level TIDAK diatur frame-src/child-src, jadi tautan ini jalan di mobile meski pratinjau ter-embed diblokir penampil PDF bawaan browser. -->
+                                                    <div class="mb-3">
+                                                        <a href="<?= esc($loadpdf_url ?? '') ?>" target="_blank" rel="noopener" class="btn btn-light-primary btn-sm font-weight-bold px-5">Buka Surat PDF di Tab Baru</a>
+                                                        <span class="text-muted small ml-2">Gunakan tombol ini bila pratinjau surat tidak tampil di perangkat mobile.</span>
+                                                    </div>
+                                                    <!-- Pratinjau ter-embed hanya untuk layar besar; di mobile penampil PDF bawaan browser menolak sub-frame internalnya (konsol: Framing '' violates frame-src) sehingga yang tampil hanya placeholder terblokir. -->
+                                                    <div class="d-none d-lg-block">
+                                                        <iframe src="<?= esc($loadpdf_url ?? '') ?>" frameborder="0" width="100%" height="600" title="Pratinjau surat PDF"></iframe>
+                                                    </div>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>

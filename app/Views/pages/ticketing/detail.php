@@ -519,20 +519,33 @@ if (!empty($fileItems) && is_iterable($fileItems)) {
                                 </button>
                                 <?php
                                 $statusSaatIni = (int) ($ticketStatus ?? ($datas['ticketStatus'] ?? 0));
+                                // Tiap tombol di balik flag KebijakanTiket dari controller
+                                // (boleh_terima/assign/buat_surat/validasi). Flag hilang
+                                // berarti tombol mati (fail-closed, mis. render unit test).
+                                // Server-side tetap dijaga pastikanKebijakan(), jadi URL
+                                // manual ke aksi yang disembunyikan ditolak 403.
                                 ?>
-                                <?php if (!empty($encKey) && $userGroupName !== 'USER' && !in_array($statusSaatIni, [5, 8], true)): ?>
-                                    <a href="<?= site_url('ticketing/terima/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-terima" id="btn-verifikasi-cepat" title="Verifikasi berkas persyaratan">
-                                        <i class="la la-check text-success mr-1"></i> Verifikasi Berkas
-                                    </a>
-                                    <a href="<?= site_url('ticketing/assign/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Disposisi Tiket Layanan" title="Disposisikan tiket ke unit kerja">
-                                        <i class="la la-share text-primary mr-1"></i> Disposisikan
-                                    </a>
-                                    <a href="<?= site_url('ticketing/create_surat/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Formulir Draf Surat Resmi" title="Buat draf surat resmi">
-                                        <i class="la la-file-text text-info mr-1"></i> Draf Surat
-                                    </a>
-                                    <a href="<?= site_url('ticketing/validasi/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Terbitkan QR Dokumen Keabsahan" title="Terbitkan QR Code keabsahan berkas">
-                                        <i class="la la-qrcode text-dark mr-1"></i> Terbitkan QR
-                                    </a>
+                                <?php if (!empty($encKey) && !in_array($statusSaatIni, [5, 8], true)): ?>
+                                    <?php if ($boleh_terima ?? false): ?>
+                                        <a href="<?= site_url('ticketing/terima/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-terima" id="btn-verifikasi-cepat" title="Verifikasi berkas persyaratan">
+                                            <i class="la la-check text-success mr-1"></i> Verifikasi Berkas
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($boleh_assign ?? false): ?>
+                                        <a href="<?= site_url('ticketing/assign/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Disposisi Tiket Layanan" title="Disposisikan tiket ke unit kerja">
+                                            <i class="la la-share text-primary mr-1"></i> Disposisikan
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if (($boleh_buat_surat ?? false) && !empty($surat_url ?? '')): ?>
+                                        <a href="<?= esc($surat_url) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Formulir Draf Surat Resmi" title="Buat draf surat resmi">
+                                            <i class="la la-file-text text-info mr-1"></i> <?= esc($surat_label ?? 'Draf Surat') ?>
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if ($boleh_validasi ?? false): ?>
+                                        <a href="<?= site_url('ticketing/validasi/' . $encKey) ?>" class="btn btn-secondary btn-sm font-weight-bold btn-ajax-modal" data-modal-title="Terbitkan QR Dokumen Keabsahan" title="Terbitkan QR Code keabsahan berkas">
+                                            <i class="la la-qrcode text-dark mr-1"></i> Terbitkan QR
+                                        </a>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </div>
                             <div>

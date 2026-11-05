@@ -243,6 +243,14 @@ class AdminViewsTest extends CIUnitTestCase
             'close_url' => 'http://example.com/ticketing/close/KEY-FROM-CLOSE-URL',
             'cetakterima' => 'http://example.com/ticketing/cetakterima/KEY-FROM-CLOSE-URL',
             'user_group' => ['susrSgroupNama' => 'ADMIN', 'susrProfil' => 'Administrator'],
+            // Flag KebijakanTiket seperti yang dikirim Ticketing::detail()
+            // untuk ADMIN — tombol aksi hanya tampil bila flag-nya true.
+            'boleh_terima' => true,
+            'boleh_assign' => true,
+            'boleh_buat_surat' => true,
+            'surat_url' => 'http://example.com/ticketing/create_surat/KEY-FROM-CLOSE-URL',
+            'surat_label' => 'Draf Surat',
+            'boleh_validasi' => true,
         ])->render('pages/ticketing/detail');
 
         // Verifikasi $encKey otomatis teresolusi dari $close_url
@@ -254,6 +262,44 @@ class AdminViewsTest extends CIUnitTestCase
         $this->assertStringContainsString('btn-ajax-terima', $html);
         $this->assertStringContainsString('btn-ajax-modal', $html);
         $this->assertStringContainsString('modal-action-dialog', $html);
+    }
+
+    /**
+     * Tombol aksi di workstation detail wajib fail-closed: tanpa flag
+     * KebijakanTiket dari controller, tidak satu pun tombol mutasi
+     * (terima/assign/surat/validasi) boleh tampil.
+     */
+    public function testTicketDetailWorkstationMenyembunyikanTombolTanpaFlag(): void
+    {
+        $renderer = service('renderer');
+        $renderer->resetData();
+        $html = $renderer->setData([
+            'page_judul' => 'Rincian Permohonan Tiket',
+            'datas' => [
+                'ticketTrackingId' => 'TK-2026-556',
+                'ticketName' => 'Siti Rahma',
+                'ticketEmail' => 'siti@unmul.ac.id',
+                'ticketNoHp' => '081122334455',
+                'ticketAddress' => 'Samarinda',
+                'ticketCreated' => '2026-09-13 12:00:00',
+                'ticketSubject' => 'Permohonan Validasi',
+                'ticketStatus' => 3,
+                'statusNama' => 'Dalam Proses',
+                'statusColor' => 'primary',
+                'categoryNama' => 'Layanan Umum',
+                'sCatNama' => 'Validasi Berkas',
+                'unitNama' => 'Biro Umum',
+            ],
+            'close_url' => 'http://example.com/ticketing/close/KEY-TANPA-FLAG',
+            'cetakterima' => 'http://example.com/ticketing/cetakterima/KEY-TANPA-FLAG',
+            'user_group' => ['susrSgroupNama' => 'OPERATOR AKADEMIK', 'susrProfil' => 'Operator'],
+        ])->render('pages/ticketing/detail');
+
+        $this->assertStringNotContainsString('ticketing/terima/KEY-TANPA-FLAG', $html);
+        $this->assertStringNotContainsString('ticketing/assign/KEY-TANPA-FLAG', $html);
+        $this->assertStringNotContainsString('ticketing/create_surat/KEY-TANPA-FLAG', $html);
+        $this->assertStringNotContainsString('ticketing/validasi/KEY-TANPA-FLAG', $html);
+        $this->assertStringNotContainsString('btn-verifikasi-cepat', $html);
     }
 
     /**

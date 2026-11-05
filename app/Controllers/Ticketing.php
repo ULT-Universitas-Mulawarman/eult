@@ -5,6 +5,7 @@ namespace App\Controllers;
 use App\Exceptions\ResponsAwalException;
 use App\Libraries\Enkripsi;
 use App\Libraries\GeneratorQr;
+use App\Libraries\KebijakanTiket;
 use App\Libraries\OsmClient;
 use App\Libraries\PengirimEmail;
 use App\Models\ModelTicketing;
@@ -58,9 +59,14 @@ class Ticketing extends BaseController
     }
 
     /**
-     * Decode kunci tiket dari URL/form dan pastikan pengguna berhak atas
+     * Decode kunci tiket dari URL/form dan pastikan pengguna berhak MELIHAT
      * tiket tersebut. Mengirim respons JSON 403 (dan menghentikan request)
      * bila kunci tidak valid atau tiket berada di luar cakupan unit pengguna.
+     *
+     * Ini adalah hak LIHAT saja. Setiap aksi MUTASI (terima/tolak/assign/
+     * accept/validasi/surat) WAJIB memanggil pastikanKebijakan() sesudahnya
+     * untuk memeriksa peran + home unit — OPERATOR yang bisa melihat semua
+     * tiket TIDAK otomatis boleh memutasinya.
      *
      * @return string Nomor tiket (ticketTrackingId) hasil decode.
      */
@@ -88,6 +94,77 @@ class Ticketing extends BaseController
         }
 
         return $idTiket;
+    }
+
+    /**
+     * Daftar ID unit home pengguna aktif (s_user_group_unit IsHome > 0).
+     * ADMIN/OPERATOR tidak punya home unit (akses lihat global) sehingga
+     * selalu kosong — aksi unit (terima/validasi) otomatis tertolak untuk
+     * mereka lewat KebijakanTiket.
+     *
+     * @return array<int, string>
+     */
+    private function homeUnitIds(): array
+    {
+        $grup = (string) ($this->pengguna['susrSgroupNama'] ?? '');
+
+        if ($grup === '' || $grup === 'ADMIN' || strpos($grup, 'OPERATOR') !== false) {
+            return [];
+        }
+
+        $baris = $this->tiket->tabelRef('s_user_group_unit', ['sgroupunitSgroupNama' => $grup, 'sgroupunitIsHome >' => 0]);
+
+        if ($baris === false) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($baris as $row) {
+            $ids[] = (string) $row['sgroupunitUnitId'];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Menegakkan kebijakan peran + home unit untuk satu aksi mutasi.
+     * Dipanggil SETELAH tiketTerotorisasi()/tiketMentahTerotorisasi() (hak
+     * lihat) dan pastikanTiketBelumFinal(). Menolak dengan 403 bila peran
+     * atau unit pengguna tidak berhak atas aksi tersebut.
+     *
+     * @param string $aksi Salah satu: terima, tolak, assign, accept, validasi, buatSurat, editSurat.
+     *
+     * @return array<string, mixed> Baris tiket hasil byId().
+     */
+    private function pastikanKebijakan(string $idTiket, string $aksi): array
+    {
+        $grup  = (string) ($this->pengguna['susrSgroupNama'] ?? '');
+        $tiket = $this->tiket->byId(['ticketTrackingId' => $idTiket]);
+
+        if (! is_array($tiket)) {
+            $this->response->setStatusCode(404);
+            eult_message_kirim('Tiket tidak ditemukan.', 'error');
+        }
+
+        $home = $this->homeUnitIds();
+
+        $boleh = match ($aksi) {
+            'terima'    => KebijakanTiket::bolehTerima($tiket, $grup, $home),
+            'tolak'     => KebijakanTiket::bolehTolak($tiket, $grup, $home),
+            'assign'    => KebijakanTiket::bolehAssign($tiket, $grup),
+            'accept'    => KebijakanTiket::bolehAccept($tiket, $grup),
+            'validasi'  => KebijakanTiket::bolehValidasi($tiket, $grup, $home),
+            'buatSurat' => KebijakanTiket::bolehBuatSurat($tiket, $grup),
+            'editSurat' => KebijakanTiket::bolehEditSurat($tiket, $grup, $home),
+            default     => false,
+        };
+
+        if (! $boleh) {
+            $this->response->setStatusCode(403);
+            eult_message_kirim('Anda tidak berhak melakukan aksi ini atas tiket ini.', 'error');
+        }
+
+        return $tiket;
     }
 
     public function index(): string
@@ -338,6 +415,7 @@ class Ticketing extends BaseController
     public function createSurat(string $kunci = '')
     {
         $id    = $this->tiketTerotorisasi($kunci);
+        $this->pastikanKebijakan((string) $id, 'buatSurat');
         $datas = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $id]);
         $surat = $datas !== false ? $this->tiket->ambilSatu('t_surat', ['tsuratLayananId' => $datas['ticketCategories']]) : false;
 
@@ -358,6 +436,7 @@ class Ticketing extends BaseController
     public function editSurat(string $kunci = '')
     {
         $id    = $this->tiketTerotorisasi($kunci);
+        $this->pastikanKebijakan((string) $id, 'editSurat');
         $datas = $this->tiket->getSurat(['ticketTrackingId' => $id]);
 
         return $this->response->setJSON(['response' => view($this->pathPage . 'form_surat', [
@@ -386,6 +465,7 @@ class Ticketing extends BaseController
 
         $idSurat   = $this->tiketTerotorisasi((string) $this->request->getPost('suratTrackingId'));
         $idLama    = $this->enkripsi->decode((string) $this->request->getPost('suratIdOld'));
+        $this->pastikanKebijakan((string) $idSurat, empty($idLama) ? 'buatSurat' : 'editSurat');
         $pejabat   = explode(';', (string) $this->request->getPost('suratPejabatNIPDraft'));
         $datas     = $this->tiket->ambilSatu('d_ticketing', ['ticketTrackingId' => $idSurat]);
         $pekerja   = $datas !== false ? $this->tiket->getTicketAssign('s_unit', ['unitId' => $datas['ticketAssign']]) : false;
@@ -536,6 +616,7 @@ class Ticketing extends BaseController
     public function assign(string $kunci = '')
     {
         $terbuka   = $this->tiketTerotorisasi($kunci);
+        $this->pastikanKebijakan((string) $terbuka, 'assign');
         $datas     = $this->tiket->byId(['ticketTrackingId' => $terbuka]);
         $disposisi = $this->tiket->disposisiById(['ticketTrackingId' => $terbuka, 'sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama']]);
         $unit      = $this->tiket->getUnitByHakakses($this->pengguna['susrSgroupNama']);
@@ -566,6 +647,7 @@ class Ticketing extends BaseController
 
         $idLama     = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
         $this->pastikanTiketBelumFinal($idLama);
+        $this->pastikanKebijakan($idLama, 'assign');
         $prioritas  = (string) $this->request->getPost('ticketPriority');
         $tujuanUnit = (string) $this->request->getPost('ticketAssign');
         $pesan      = (string) $this->request->getPost('ticketMessage');
@@ -621,6 +703,7 @@ class Ticketing extends BaseController
     public function accept(string $kunci = '')
     {
         $terbuka   = $this->tiketTerotorisasi($kunci);
+        $this->pastikanKebijakan((string) $terbuka, 'accept');
         $datas     = $this->tiket->byId(['ticketTrackingId' => $terbuka]);
         $disposisi = $this->tiket->disposisiById(['ticketTrackingId' => $terbuka, 'sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama']]);
         $isAdmin   = ($this->pengguna['susrSgroupNama'] ?? '') === 'ADMIN';
@@ -668,6 +751,7 @@ class Ticketing extends BaseController
 
         $idLama     = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
         $this->pastikanTiketBelumFinal($idLama);
+        $this->pastikanKebijakan($idLama, 'accept');
         $prioritas  = (string) $this->request->getPost('ticketPriority');
         $tujuanUnit = (string) $this->request->getPost('ticketAssign');
         $pesan      = (string) $this->request->getPost('ticketMessage');
@@ -732,6 +816,7 @@ class Ticketing extends BaseController
     public function validasi(string $kunci = '')
     {
         $terbuka   = $this->tiketTerotorisasi($kunci);
+        $this->pastikanKebijakan((string) $terbuka, 'validasi');
         $datas     = $this->tiket->byId(['ticketTrackingId' => $terbuka]);
         $disposisi = $this->tiket->disposisiById(['ticketTrackingId' => $terbuka, 'sgroupunitSgroupNama' => $this->pengguna['susrSgroupNama']]);
         $arsip     = $this->tiket->ambilSatu('d_archive', ['archiveTrackingId' => $terbuka, 'archiveJenis' => 'TIKET']);
@@ -758,6 +843,7 @@ class Ticketing extends BaseController
 
         $idLama    = $this->tiketMentahTerotorisasi((string) $this->request->getPost('ticketIdOld'));
         $this->pastikanTiketBelumFinal($idLama);
+        $this->pastikanKebijakan($idLama, 'validasi');
         $terakhir  = $this->tiket->disposisiLast(['disposisiTicketId' => $idLama]);
         $unitAkhir = $terakhir !== false ? $terakhir['disposisiUnit'] : '';
         $pekerja   = $this->tiket->getTicketAssign('s_unit', ['unitId' => $unitAkhir]);
@@ -833,6 +919,24 @@ class Ticketing extends BaseController
         $data['cetakterima']  = site_url($this->controllerName . '/cetakterima') . '/' . $kunci;
         $data['mhs']          = $namaMhs;
 
+        // Flag tampil tiap tombol aksi — dihitung dari KebijakanTiket yang
+        // SAMA dengan penjaga server-side pastikanKebijakan(), sehingga
+        // tombol yang tampil pasti lolos saat diklik, dan tombol yang
+        // disembunyikan tetap ditolak 403 bila URL-nya dipanggil manual.
+        $grup              = (string) ($this->pengguna['susrSgroupNama'] ?? '');
+        $home              = $this->homeUnitIds();
+        $tiket             = is_array($datas) ? $datas : [];
+        $bolehBuatSurat    = $tiket !== [] && KebijakanTiket::bolehBuatSurat($tiket, $grup);
+        $bolehEditSurat    = $tiket !== [] && KebijakanTiket::bolehEditSurat($tiket, $grup, $home);
+        $data['boleh_terima']    = $tiket !== [] && KebijakanTiket::bolehTerima($tiket, $grup, $home);
+        $data['boleh_assign']    = $tiket !== [] && KebijakanTiket::bolehAssign($tiket, $grup);
+        $data['boleh_buat_surat'] = $bolehBuatSurat || $bolehEditSurat;
+        $data['surat_url']       = $bolehBuatSurat
+            ? site_url($this->controllerName . '/create_surat') . '/' . $kunci
+            : ($bolehEditSurat ? site_url($this->controllerName . '/edit_surat') . '/' . $kunci : '');
+        $data['surat_label']     = $bolehEditSurat && ! $bolehBuatSurat ? 'Edit Surat' : 'Draf Surat';
+        $data['boleh_validasi']  = $tiket !== [] && KebijakanTiket::bolehValidasi($tiket, $grup, $home);
+
         return view($this->template, $data);
     }
 
@@ -905,6 +1009,7 @@ class Ticketing extends BaseController
 
         $terbuka = $this->tiketTerotorisasi($kunci);
         $this->pastikanTiketBelumFinal((string) $terbuka);
+        $this->pastikanKebijakan((string) $terbuka, 'terima');
         $proses  = $this->tiket->ubah('d_ticketing', [
             'ticketIsVerified' => 1,
             'ticketVerified'   => date('Y-m-d H:i:s'),
@@ -928,6 +1033,7 @@ class Ticketing extends BaseController
 
         $terbuka = $this->tiketTerotorisasi($kunci);
         $this->pastikanTiketBelumFinal((string) $terbuka);
+        $this->pastikanKebijakan((string) $terbuka, 'tolak');
         $pesan   = (string) $this->request->getPost('pesan_tolak');
         $proses  = $this->tiket->ubah('d_ticketing', [
             'ticketStatus'     => 8,
@@ -1483,9 +1589,15 @@ class Ticketing extends BaseController
     }
 
     /**
-     * Memeriksa hak akses staf atas tiket pemilik berkas, memakai
-     * mekanisme otorisasi yang sudah dipakai controller ini
-     * (grup ADMIN/OPERATOR, disposisi unit, atau unit pemilik tiket).
+     * Hak LIHAT tiket (detail, unduh berkas, ekspor, rating).
+     * ADMIN/OPERATOR boleh melihat semua tiket (front-office global, sama
+     * seperti versi awal); grup unit hanya tiket yang didisposisikan ke
+     * unitnya atau yang ticketAssign-nya ada di mapping hak aksesnya.
+     *
+     * HAK LIHAT BUKAN HAK MUTASI: lolos dari sini tidak berarti boleh
+     * terima/tolak/assign/accept/validasi/surat. Setiap aksi mutasi wajib
+     * memanggil pastikanKebijakan() yang memeriksa peran + home unit lewat
+     * KebijakanTiket.
      */
     private function bolehAksesTiket(string $idTiket): bool
     {

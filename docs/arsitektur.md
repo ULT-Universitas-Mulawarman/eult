@@ -49,12 +49,21 @@ otomatis mengikuti perlakuan OPERATOR tanpa perubahan kode.
 
 ## Alokasi Nomor Tiket
 
-Nomor tiket = 8 huruf acak + `-` + urutan 3 digit (`ModelTicketing::
-nomorTiketBerikutnya()`). Pasangan alokasi-nomor + insert dibungkus named
-lock MySQL `GET_LOCK('eult_nomor_<kode>')` agar dua permintaan bersamaan
-dengan kode acak sama tidak menghasilkan nomor ganda. Perlindungan
-tertinggi tetap butuh UNIQUE KEY pada `d_ticketing.ticketTrackingId`
-(belum ada di skema).
+Nomor tiket = kode acak 8 huruf diformat `XXXX-XXXX`
+(`eult_generate_kode()`) + `-` + urutan 3 digit
+(`XXXX-XXXX-NNN`, `ModelTicketing::nomorTiketBerikutnya()` memotong
+3 digit terakhir + 1, `getNumber()` membaca maksimum per awalan
+`LEFT(ticketTrackingId,9)`). Pasangan alokasi-nomor + insert
+dibungkus named lock MySQL `GET_LOCK('eult_nomor_<kode>')`
+(`ModelTicketing::kunciNomorTiket()`) agar dua permintaan bersamaan
+dengan kode acak sama tidak menghasilkan nomor ganda. Lapisan
+penegakan kedua berada di database: `PRIMARY KEY` pada
+`d_ticketing.ticketTrackingId` (setara UNIQUE, tidak boleh NULL/duplikat)
+menolak duplikat dari jalur apa pun dengan error 1062. Bila PRIMARY KEY
+belum ada di environment tujuan, migration
+`AddUniqueTiketTracking` menambah `UNIQUE KEY uk_tiket_tracking`
+secara idempoten (skip bila proteksi sudah ada) — `GET_LOCK` tetap
+menjadi pengaman pertama, unique hanya menegakkan di akhir.
 
 ## Catatan Test
 

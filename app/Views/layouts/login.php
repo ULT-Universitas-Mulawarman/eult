@@ -2581,7 +2581,7 @@
                     try {
                         var res = typeof xhr.responseJSON === 'object' ? xhr.responseJSON : JSON.parse(xhr.responseText);
                         if (res && res.status === true && res.umum === true) {
-                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Pemohon Umum — isi nama manual</span>');
+                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Data tidak ditemukan di OSM — jika Anda mahasiswa/pegawai, periksa kembali nomor identitas Anda. Lanjut mengisi sebagai pemohon umum (nama diisi manual).</span>');
                         } else if (res && res.status === true) {
                             $('#identitas-feedback').html('<span class="text-success font-weight-bold"><i class="flaticon2-check-mark"></i> Data Ditemukan</span>');
                         } else {
@@ -2599,12 +2599,10 @@
                 }
             });
 
-            // Observasi perubahan nama saat nilai nama terisi
-            $("[name='ticketName']").on('change', function() {
-                if ($(this).val() !== '') {
-                    $('#identitas-feedback').html('<span class="text-success font-weight-bold"><i class="flaticon2-check-mark"></i> Data Ditemukan</span>');
-                }
-            });
+            // Label identitas hanya boleh berubah dari hasil cek OSM (ajaxComplete
+            // di atas). JANGAN tambah handler change pada ticketName: pemohon
+            // umum mengisi nama dengan tangan, dan mengisi nama TIDAK boleh
+            // menampilkan "Data Ditemukan" seolah dia mahasiswa/pegawai.
 
             // =========================================================================
             // Controller Delight Unggah Dokumen Berkas Persyaratan

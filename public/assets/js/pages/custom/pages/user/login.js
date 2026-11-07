@@ -143,7 +143,10 @@ var KTLoginGeneral = function () {
     var urutanIdentitas = 0;
     var urutanLayanan = 0;
 
-    var loadLayanan = function (istrue, layananId) {
+    // pesan: teks pengganti saat dropdown terkunci (default "masukkan nomor
+    // identitas dulu" hanya tepat untuk kondisi kosong; kondisi gagal cek
+    // butuh penjelasan kenapa layanan tidak bisa dipilih).
+    var loadLayanan = function (istrue, layananId, pesan) {
         urutanLayanan++;
         var urutanIni = urutanLayanan;
         if (istrue) {
@@ -169,7 +172,8 @@ var KTLoginGeneral = function () {
                 }
             });
         } else {
-            renderKategori('<option value="">Masukkan nomor identitas terlebih dahulu...</option>', 'Masukkan nomor identitas terlebih dahulu...', true);
+            var teksTerkunci = pesan || 'Masukkan nomor identitas terlebih dahulu...';
+            renderKategori('<option value="">' + teksTerkunci + '</option>', teksTerkunci, true);
             $('#syarat').html('');
         }
     }
@@ -211,7 +215,7 @@ var KTLoginGeneral = function () {
                     if (res.status == true) {
                         if (res.umum == true) {
                             $("[name='ticketName']").attr('readonly', false);
-                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Pemohon Umum — isi nama manual</span>');
+                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Data tidak ditemukan di OSM — jika Anda mahasiswa/pegawai, periksa kembali nomor identitas Anda. Lanjut mengisi sebagai pemohon umum (nama diisi manual).</span>');
                         } else {
                             $("[name='ticketName']").attr('readonly', true);
                             if (res.ismhs == true) {
@@ -219,13 +223,12 @@ var KTLoginGeneral = function () {
                             } else {
                                 $("[name='ticketName']").val(res.datapegawai.name);
                             }
-                            $("[name='ticketName']").trigger('change');
                             $('#identitas-feedback').html('<span class="text-success font-weight-bold"><i class="flaticon2-check-mark"></i> Data Ditemukan</span>');
                         }
                         loadLayanan(res.status);
                     } else {
                         $('#identitas-feedback').html('<span class="text-danger font-weight-bold"><i class="flaticon2-cross"></i> Data Tidak Ditemukan</span>');
-                        loadLayanan(false);
+                        loadLayanan(false, null, 'Data tidak ditemukan — periksa kembali nomor identitas Anda.');
                     }
                 },
                 error: () => {
@@ -233,7 +236,7 @@ var KTLoginGeneral = function () {
                         return;
                     }
                     $('#identitas-feedback').html('<span class="text-danger small">Gagal memeriksa data</span>');
-                    loadLayanan(false);
+                    loadLayanan(false, null, 'Gagal memeriksa data — ketik ulang nomor identitas untuk mencoba lagi.');
                 }
             });
         } else {
@@ -242,7 +245,9 @@ var KTLoginGeneral = function () {
             } else {
                 $('#identitas-feedback').html('');
             }
-            loadLayanan(false);
+            loadLayanan(false, null, val_id.length > 0
+                ? 'Panjang nomor identitas tidak dikenali (' + val_id.length + ' digit) — periksa kembali NIM/NIP/NIK Anda.'
+                : null);
         }
     }
 

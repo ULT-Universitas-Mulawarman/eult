@@ -194,6 +194,9 @@ var KTLoginGeneral = function () {
 
     var checkIdentitas = function () {
         var val_id = $('#ticketIdentitas').val();
+        // Catatan detail identitas hanya berlaku untuk satu hasil cek;
+        // sembunyikan dulu, cabang umum di bawah yang menyalakannya kembali.
+        $('#identitas-note').hide();
         $("[name='ticketName']").val('');
         $("[name='ticketName']").attr('readonly', false);
         if (val_id.length == 10 || val_id.length == 16 || val_id.length == 18 || val_id.length == 14) {
@@ -215,7 +218,8 @@ var KTLoginGeneral = function () {
                     if (res.status == true) {
                         if (res.umum == true) {
                             $("[name='ticketName']").attr('readonly', false);
-                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Data tidak ditemukan di OSM — jika Anda mahasiswa/pegawai, periksa kembali nomor identitas Anda. Lanjut mengisi sebagai pemohon umum (nama diisi manual).</span>');
+                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Tidak terdaftar — pemohon umum</span>');
+                            $('#identitas-note').html('<i class="flaticon2-information"></i> Data tidak ditemukan di OSM. Jika Anda mahasiswa/pegawai, <b>periksa kembali nomor identitas Anda</b>. Lanjut mengisi sebagai pemohon umum — nama diisi manual.').show();
                         } else {
                             $("[name='ticketName']").attr('readonly', true);
                             if (res.ismhs == true) {

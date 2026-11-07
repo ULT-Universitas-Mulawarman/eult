@@ -305,6 +305,24 @@
             margin-left: 3px;
         }
 
+        /* Blok catatan status identitas (detail panjang). Baris label di atas
+           hanya untuk status pendek satu baris — teks panjang harus turun ke
+           blok ini agar tidak merusak baris label dua kolom. */
+        .eult-note {
+            display: none;
+            border-radius: 4px;
+            font-size: 12px;
+            line-height: 1.5;
+            padding: 0.5rem 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .eult-note.eult-note--info {
+            background: #eef3ff;
+            border: 1px solid #c7d7fe;
+            color: #3f5bb9;
+        }
+
         .eult-input {
             border: 1px solid #e2e5ec;
             border-radius: 4px;
@@ -1986,6 +2004,7 @@
                                             </div>
                                             <input type="text" class="form-control eult-input" id="ticketIdentitas" name="ticketIdentitas" placeholder="Masukkan 10 digit NIM, 18 digit NIP, atau 16 digit NIK..." value="<?= $datas != false ? $datas['ticketIdentitas'] : '' ?>" autocomplete="off">
                                         </div>
+                                        <div id="identitas-note" class="eult-note eult-note--info" role="status"></div>
                                         <span class="form-text text-muted small mt-1">
                                             Ketik angka tanpa spasi/tanda baca. NIM/NIP diverifikasi otomatis ke data kampus; NIK untuk pemohon umum diisi nama manual.
                                         </span>
@@ -2581,7 +2600,10 @@
                     try {
                         var res = typeof xhr.responseJSON === 'object' ? xhr.responseJSON : JSON.parse(xhr.responseText);
                         if (res && res.status === true && res.umum === true) {
-                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Data tidak ditemukan di OSM — jika Anda mahasiswa/pegawai, periksa kembali nomor identitas Anda. Lanjut mengisi sebagai pemohon umum (nama diisi manual).</span>');
+                            // Status di baris label harus satu baris pendek;
+                            // detail panjangnya ditangani #identitas-note
+                            // (diisi oleh checkIdentitas di login.js).
+                            $('#identitas-feedback').html('<span class="text-info font-weight-bold"><i class="flaticon2-information"></i> Tidak terdaftar — pemohon umum</span>');
                         } else if (res && res.status === true) {
                             $('#identitas-feedback').html('<span class="text-success font-weight-bold"><i class="flaticon2-check-mark"></i> Data Ditemukan</span>');
                         } else {

@@ -458,13 +458,14 @@ class Login extends BaseController
         //
         // Panjang yang diterima:
         //   10 digit -> NIM lama (juga NIK sebagian daerah)
+        //   14 digit -> ID pengguna 14 digit (tidak ada di OSM)
         //   16 digit -> NIK KTP
         // NIM/NIP yang ditemukan di OSM sudah ditangani di atas; blok ini
         // hanya berlaku bila OSM tidak mengembalikan data.
         //
         // Pemohon umum DIBATASI ke layanan publik (lihat
         // ModelMaster::layananUmumIds()) — bukan seluruh layanan kampus.
-        if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
+        if (in_array(strlen($id), [10, 14, 16], true) && ctype_digit($id)) {
             eult_pemohon_role_simpan($id, 'umum');
 
             return $this->response->setJSON([

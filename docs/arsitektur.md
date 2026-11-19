@@ -31,7 +31,7 @@ server lain, seluruh identifier lintas-DB harus dimigrasi ke koneksi
 | Grup | Pencocokan di kode | Peran |
 |---|---|---|
 | `ADMIN` | eksak `=== 'ADMIN'` | Akses penuh; lihat semua tiket |
-| `OPERATOR` | `strpos($grup, 'OPERATOR') !== false` (prefiks, mis. `OPERATOR AKADEMIK`) | Portal operator; lihat semua tiket pada unitnya |
+| `OPERATOR` | `strpos($grup, 'OPERATOR') !== false` (prefiks, mis. `OPERATOR_AKADEMIK`, `OPERATOR_KEUANGAN`, `OPERATOR_CALLCENTER`) | Portal operator: `OPERATOR_CALLCENTER` (`sgroupCategoryId = 99`) melihat tiket seluruh unit; `OPERATOR_*` per unit (`sgroupCategoryId != 99`) hanya melihat tiket unit layanannya (`ref_unit.unitId = sgroupCategoryId`) |
 | `PRODUKSI` | prefiks via strpos → flag `isProduksi` | Produksi surat |
 | `VERIFIKATOR` | prefiks via strpos → flag `isVerifikator` | Verifikasi berkas |
 | `KASUBBAG` / `DISPOSISI` | string literal pada view/aksi | Alur disposisi BOTTOMUP |

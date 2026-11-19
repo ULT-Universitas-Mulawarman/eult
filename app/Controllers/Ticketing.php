@@ -169,14 +169,22 @@ class Ticketing extends BaseController
 
     public function index(): string
     {
-        $data                 = $this->getMaster($this->pathPage . $this->pageIndex);
-        $data['scripts']      = [$this->pathJs . 'ticketing'];
-        $data['tanggal']      = session()->get('tanggal');
-        $data['create_url']   = site_url($this->controllerName . '/create');
-        $data['user_group']   = $this->pengguna;
-        $data['category']     = $this->tiket->tabelRef($this->tiket->refUlt('ref_unit'), '', 'unitUrut');
-        $data['status_layanan'] = $this->tiket->tabelRef('r_status');
-        $data['show_url']     = site_url($this->controllerName . '/response') . '/';
+        $unitOperator = $this->tiket->unitLayananOperator(
+            (string) ($this->pengguna['susrSgroupNama'] ?? ''),
+            (string) ($this->pengguna['susrCategoryId'] ?? '')
+        );
+
+        $data                     = $this->getMaster($this->pathPage . $this->pageIndex);
+        $data['scripts']          = [$this->pathJs . 'ticketing'];
+        $data['tanggal']          = session()->get('tanggal');
+        $data['create_url']       = site_url($this->controllerName . '/create');
+        $data['user_group']       = $this->pengguna;
+        $data['unit_operator_id'] = $unitOperator;
+        $data['category']         = $unitOperator !== null
+            ? $this->tiket->tabelRef($this->tiket->refUlt('ref_unit'), ['unitId' => $unitOperator], 'unitUrut')
+            : $this->tiket->tabelRef($this->tiket->refUlt('ref_unit'), '', 'unitUrut');
+        $data['status_layanan']   = $this->tiket->tabelRef('r_status');
+        $data['show_url']         = site_url($this->controllerName . '/response') . '/';
 
         return view($this->template, $data);
     }
@@ -245,7 +253,13 @@ class Ticketing extends BaseController
         }
 
         if ($sesi['susrSgroupNama'] === 'ADMIN' || strpos($sesi['susrSgroupNama'], 'OPERATOR') !== false) {
-            if ($layanan !== '') {
+            $unitOperator = $this->tiket->unitLayananOperator(
+                (string) ($sesi['susrSgroupNama'] ?? ''),
+                (string) ($sesi['susrCategoryId'] ?? '')
+            );
+            if ($unitOperator !== null) {
+                $kondisi['runit.unitId'] = $unitOperator;
+            } elseif ($layanan !== '') {
                 $kondisi['runit.unitId'] = $layanan;
             }
             $datas = $this->tiket->dataById($kondisi, $statusLayanan, $keyword);
@@ -1607,8 +1621,19 @@ class Ticketing extends BaseController
             return false;
         }
 
-        if ($grup === 'ADMIN' || strpos($grup, 'OPERATOR') !== false) {
+        if ($grup === 'ADMIN') {
             return true;
+        }
+
+        if (strpos($grup, 'OPERATOR') !== false) {
+            $unitOperator = $this->tiket->unitLayananOperator($grup, (string) ($this->pengguna['susrCategoryId'] ?? ''));
+            if ($unitOperator === null) {
+                return true;
+            }
+
+            $datas = $this->tiket->byId(['ticketTrackingId' => $idTiket]);
+
+            return is_array($datas) && (string) ($datas['sCatCategoryId'] ?? '') === $unitOperator;
         }
 
         if ($this->tiket->disposisiById(['ticketTrackingId' => $idTiket, 'sgroupunitSgroupNama' => $grup]) !== false) {
@@ -1732,7 +1757,11 @@ class Ticketing extends BaseController
 
         if ($grup === 'ADMIN' || strpos($grup, 'OPERATOR') !== false) {
             $kondisi['ticketTrackingId'] = $id;
-            $baris                       = $this->tiket->dataById($kondisi);
+            $unitOperator                = $this->tiket->unitLayananOperator($grup, (string) ($this->pengguna['susrCategoryId'] ?? ''));
+            if ($unitOperator !== null) {
+                $kondisi['runit.unitId'] = $unitOperator;
+            }
+            $baris = $this->tiket->dataById($kondisi);
         } else {
             $kondisi['sgroupunitSgroupNama'] = $grup;
             $kondisi['disposisiTicketId']    = $id;

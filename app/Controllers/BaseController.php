@@ -90,9 +90,12 @@ abstract class BaseController extends \CodeIgniter\Controller
         $data['page_judul']     = $this->judul;
 
         $isAdminOperator = $namaGrup === 'ADMIN' || strpos($namaGrup, 'OPERATOR') !== false;
+        $unitOperator    = $isAdminOperator
+            ? $this->modelMaster->unitLayananOperator($namaGrup, (string) ($sesi['susrCategoryId'] ?? ''))
+            : null;
 
         $data['notiftiket'] = $isAdminOperator
-            ? $this->modelMaster->dataNotif('repliesRead = 0')
+            ? $this->modelMaster->dataNotif($unitOperator !== null ? ['repliesRead' => 0, 'runit.unitId' => $unitOperator] : 'repliesRead = 0')
             : $this->modelMaster->disposisiNotif('(`repliesRead` = 0 OR (`repliesTicketId` IS NULL AND `ticketStatus` = 3)) AND `sgroupunitSgroupNama` = ' . $this->modelMaster->dbAktif()->escape($namaGrup));
 
         $data['detail_url'] = site_url('ticketing/detail') . '/';

@@ -138,12 +138,20 @@ class Otentifikasi extends BaseController
      */
     private function bangunSesi(array $datas): array
     {
+        $namaGrup = (string) ($datas['susrSgroupNama'] ?? 'USER');
+        $katId    = trim((string) ($datas['susrCategoryId'] ?? ''));
+
+        if ($katId === '' && $namaGrup !== '' && $namaGrup !== 'USER') {
+            $grup  = $this->masuk->ambilSatu('s_user_group', ['sgroupNama' => $namaGrup]);
+            $katId = is_array($grup) ? trim((string) ($grup['sgroupCategoryId'] ?? '')) : '';
+        }
+
         return [
             'susrNama'           => $datas['susrNama'],
-            'susrSgroupNama'     => $datas['susrSgroupNama'] ?? 'USER',
-            'susrSgroupNama_ori' => $datas['susrSgroupNama'] ?? 'USER',
+            'susrSgroupNama'     => $namaGrup,
+            'susrSgroupNama_ori' => $namaGrup,
             'susrProfil'         => $datas['susrProfil'],
-            'susrCategoryId'     => $datas['susrCategoryId'] ?? '',
+            'susrCategoryId'     => $katId,
         ];
     }
 }

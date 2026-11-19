@@ -63,10 +63,12 @@
                                                     Unit Layanan <span class="text-danger">*</span>
                                                 </label>
                                                 <select class="form-control m-select2" name="layanan" id="filter_layanan" required>
-                                                    <option value=""></option>
+                                                    <?php if (empty($unit_operator_id)) : ?>
+                                                        <option value=""></option>
+                                                    <?php endif; ?>
                                                     <?php if (!empty($category)) : ?>
                                                         <?php foreach ($category as $row) : ?>
-                                                            <option value="<?= esc($row['unitId']) ?>"><?= esc($row['unitNama']) ?></option>
+                                                            <option value="<?= esc($row['unitId']) ?>" <?= (!empty($unit_operator_id) && (string) $row['unitId'] === (string) $unit_operator_id) ? 'selected' : '' ?>><?= esc($row['unitNama']) ?></option>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>
                                                 </select>

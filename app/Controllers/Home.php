@@ -49,8 +49,22 @@ class Home extends BaseController
             $statusTable    = $db->tableExists('ticket_status') ? 'ticket_status' : ($db->tableExists('r_status') ? 'r_status' : null);
             $disposisiTable = $db->tableExists('d_disposisi') ? 'd_disposisi' : null;
 
-            $butuhFilterUnit = ($grup !== 'ADMIN' && strpos($grup, 'OPERATOR') === false);
-            $unitDiizinkan   = [];
+            $butuhFilterUnit    = ($grup !== 'ADMIN' && strpos($grup, 'OPERATOR') === false);
+            $unitDiizinkan      = [];
+            $unitLayananOp      = $this->modelMaster->unitLayananOperator($grup, (string) ($sesi['susrCategoryId'] ?? ''));
+            $layananOperatorIds = [];
+
+            if ($unitLayananOp !== null) {
+                $barisLayanan = $this->modelMaster->dbUlt()->table('ref_layanan')
+                    ->select('layananId')
+                    ->where('layananunitId', $unitLayananOp)
+                    ->get()
+                    ->getResultArray();
+                $layananOperatorIds = array_values(array_unique(array_filter(
+                    array_map(static fn (array $r): string => (string) ($r['layananId'] ?? ''), $barisLayanan),
+                    static fn (string $v): bool => $v !== ''
+                )));
+            }
 
             if ($butuhFilterUnit && $grup !== '' && $db->tableExists('s_user_group_unit')) {
                 $barisUnit = $db->table('s_user_group_unit')
@@ -67,7 +81,16 @@ class Home extends BaseController
             if ($ticketTable !== null && (! $butuhFilterUnit || $unitDiizinkan !== [])) {
                 $daftarUnitSql = implode(',', array_map(static fn (string $u): string => $db->escape($u), $unitDiizinkan));
 
-                $terapkanFilterUnit = static function ($qb) use ($butuhFilterUnit, $unitDiizinkan, $daftarUnitSql, $ticketTable, $disposisiTable): void {
+                $terapkanFilterUnit = static function ($qb) use ($butuhFilterUnit, $unitDiizinkan, $daftarUnitSql, $ticketTable, $disposisiTable, $unitLayananOp, $layananOperatorIds): void {
+                    if ($unitLayananOp !== null) {
+                        if ($layananOperatorIds !== []) {
+                            $qb->whereIn("{$ticketTable}.ticketCategories", $layananOperatorIds);
+                        } else {
+                            $qb->where('1 = 0', null, false);
+                        }
+
+                        return;
+                    }
                     if (! $butuhFilterUnit) {
                         return;
                     }

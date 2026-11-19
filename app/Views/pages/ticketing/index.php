@@ -69,10 +69,12 @@
                                             <label class="font-weight-bold" style="font-size: 12px; color: #48465b;">Unit Layanan</label>
                                             <?php if (($user_group['susrSgroupNama'] ?? '') === 'ADMIN' || (strpos(($user_group['susrSgroupNama'] ?? ''), 'OPERATOR') !== false)) : ?>
                                                 <select class="form-control m-select2" name="layanan" id="filter_layanan">
-                                                    <option value=""></option>
+                                                    <?php if (empty($unit_operator_id)) : ?>
+                                                        <option value=""></option>
+                                                    <?php endif; ?>
                                                     <?php if (!empty($category)) : ?>
                                                         <?php foreach ($category as $row) : ?>
-                                                            <option value="<?= esc($row['unitId']) ?>"><?= esc($row['unitNama']) ?></option>
+                                                            <option value="<?= esc($row['unitId']) ?>" <?= (!empty($unit_operator_id) && (string) $row['unitId'] === (string) $unit_operator_id) ? 'selected' : '' ?>><?= esc($row['unitNama']) ?></option>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>
                                                 </select>

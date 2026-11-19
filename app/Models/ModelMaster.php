@@ -99,7 +99,7 @@ class ModelMaster extends \CodeIgniter\Model
      * sekarang `db_ultunmul` sesuai EULT_DBULT_NAME di .env).
      * Nama database JANGAN di-hardcode di query — pakai dbUltName()/refUlt().
      */
-    protected function dbUlt(): BaseConnection
+    public function dbUlt(): BaseConnection
     {
         return \Config\Database::connect('dbult');
     }
@@ -620,6 +620,49 @@ class ModelMaster extends \CodeIgniter\Model
             ->get()->getResultArray();
 
         return $hasil === [] ? false : $hasil;
+    }
+
+    /**
+     * Resolusi unit layanan (ref_unit.unitId) untuk grup OPERATOR_*.
+     *
+     * - ADMIN dan non-OPERATOR mengembalikan null (mengikuti jalur otorisasi masing-masing).
+     * - OPERATOR_CALLCENTER (sgroupCategoryId = 99 / "Semua Layanan", atau '' / '0') adalah
+     *   operator global -> mengembalikan null.
+     * - OPERATOR_<UNIT> (mis. OPERATOR_KEUANGAN = 21, OPERATOR_AKADEMIK = 22) -> mengembalikan
+     *   string unitId layanan tempat operator tersebut ditugaskan.
+     */
+    public function unitLayananOperator(string $namaGrup, ?string $kategoriSesi = null): ?string
+    {
+        if ($namaGrup === '' || $namaGrup === 'ADMIN' || strpos($namaGrup, 'OPERATOR') === false) {
+            return null;
+        }
+
+        $katId = '';
+
+        try {
+            $baris = $this->db->table('s_user_group')
+                ->select('sgroupCategoryId')
+                ->where('sgroupNama', $namaGrup)
+                ->limit(1)
+                ->get()
+                ->getRowArray();
+
+            if (is_array($baris)) {
+                $katId = trim((string) ($baris['sgroupCategoryId'] ?? ''));
+            }
+        } catch (\Throwable) {
+            $katId = '';
+        }
+
+        if ($katId === '') {
+            $katId = trim((string) ($kategoriSesi ?? ''));
+        }
+
+        if ($katId === '' || $katId === '0' || $katId === '99') {
+            return null;
+        }
+
+        return $katId;
     }
 
     /**

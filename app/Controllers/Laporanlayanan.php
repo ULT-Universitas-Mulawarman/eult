@@ -28,12 +28,21 @@ class Laporanlayanan extends BaseController
 
     public function index(): string
     {
-        $data               = $this->getMaster($this->pathPage . $this->pageIndex);
-        $data['scripts']    = [$this->pathJs . 'laporan'];
-        $data['tanggal']    = session()->get('tanggal');
-        $data['user_group'] = $this->sesiLogin();
-        $data['category']   = $this->laporan->tabelRef($this->laporan->refUlt('ref_unit'), '', 'unitUrut');
-        $data['show_url']   = site_url($this->controllerName . '/response') . '/';
+        $sesi         = $this->sesiLogin() ?? [];
+        $unitOperator = $this->laporan->unitLayananOperator(
+            (string) ($sesi['susrSgroupNama'] ?? ''),
+            (string) ($sesi['susrCategoryId'] ?? '')
+        );
+
+        $data                     = $this->getMaster($this->pathPage . $this->pageIndex);
+        $data['scripts']          = [$this->pathJs . 'laporan'];
+        $data['tanggal']          = session()->get('tanggal');
+        $data['user_group']       = $this->sesiLogin();
+        $data['unit_operator_id'] = $unitOperator;
+        $data['category']         = $unitOperator !== null
+            ? $this->laporan->tabelRef($this->laporan->refUlt('ref_unit'), ['unitId' => $unitOperator], 'unitUrut')
+            : $this->laporan->tabelRef($this->laporan->refUlt('ref_unit'), '', 'unitUrut');
+        $data['show_url']         = site_url($this->controllerName . '/response') . '/';
 
         return view($this->template, $data);
     }
@@ -58,6 +67,13 @@ class Laporanlayanan extends BaseController
         $tanggalAkhir = date('Y-m-d', (int) strtotime($pecah[1]));
 
         if (($sesi['susrSgroupNama'] ?? '') === 'ADMIN' || strpos($sesi['susrSgroupNama'] ?? '', 'OPERATOR') !== false) {
+            $unitOperator = $this->laporan->unitLayananOperator(
+                (string) ($sesi['susrSgroupNama'] ?? ''),
+                (string) ($sesi['susrCategoryId'] ?? '')
+            );
+            if ($unitOperator !== null) {
+                $kategori = $unitOperator;
+            }
             $datas = $this->laporan->getLaporanLayanan($tanggalAwal, $tanggalAkhir, $sesi['susrSgroupNama'], $kategori);
         } else {
             $datas = $this->laporan->getLaporanLayanan($tanggalAwal, $tanggalAkhir, $sesi['susrSgroupNama'] ?? '');

@@ -623,6 +623,26 @@ class ModelMaster extends \CodeIgniter\Model
     }
 
     /**
+     * Pemetaan bawaan sgroupCategoryId (ref_unit.unitId) untuk grup OPERATOR_* standar.
+     * Dipakai sebagai fallback deterministik saat koneksi/tabel s_user_group belum tersedia
+     * (mis. pada suite Unit tanpa MySQL) dan sesi tidak membawa susrCategoryId.
+     *
+     * @var array<string, string>
+     */
+    private const UNIT_LAYANAN_OPERATOR_BAWAAN = [
+        'OPERATOR_KEUANGAN'      => '21',
+        'OPERATOR_AKADEMIK'      => '22',
+        'OPERATOR_KEMAHASISWAAN' => '23',
+        'OPERATOR_PERENCANAAN'   => '24',
+        'OPERATOR_KERJASAMA'     => '25',
+        'OPERATOR_KEPEGAWAIAN'   => '26',
+        'OPERATOR_LP3M'          => '27',
+        'OPERATOR_UPTTIK'        => '28',
+        'OPERATOR_UMUM'          => '29',
+        'OPERATOR_CALLCENTER'    => '99',
+    ];
+
+    /**
      * Resolusi unit layanan (ref_unit.unitId) untuk grup OPERATOR_*.
      *
      * - ADMIN dan non-OPERATOR mengembalikan null (mengikuti jalur otorisasi masing-masing).
@@ -656,6 +676,10 @@ class ModelMaster extends \CodeIgniter\Model
 
         if ($katId === '') {
             $katId = trim((string) ($kategoriSesi ?? ''));
+        }
+
+        if ($katId === '' && isset(self::UNIT_LAYANAN_OPERATOR_BAWAAN[$namaGrup])) {
+            $katId = self::UNIT_LAYANAN_OPERATOR_BAWAAN[$namaGrup];
         }
 
         if ($katId === '' || $katId === '0' || $katId === '99') {

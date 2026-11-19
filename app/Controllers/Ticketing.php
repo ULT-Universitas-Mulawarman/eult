@@ -348,8 +348,9 @@ class Ticketing extends BaseController
         //
         // Panjang yang diterima (samakan dengan Login::getIdentitas):
         //   10 digit -> NIM lama (juga NIK sebagian daerah)
+        //   14 digit -> ID pengguna 14 digit (tidak ada di OSM)
         //   16 digit -> NIK KTP
-        if (in_array(strlen($id), [10, 16], true) && ctype_digit($id)) {
+        if (in_array(strlen($id), [10, 14, 16], true) && ctype_digit($id)) {
             eult_pemohon_role_simpan($id, 'umum');
 
             return $this->response->setJSON([

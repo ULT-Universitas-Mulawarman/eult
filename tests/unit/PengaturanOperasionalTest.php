@@ -218,6 +218,7 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
     {
         return [
             'NIM lama 10 digit'   => ['0707055155', true],
+            'ID 14 digit'         => ['12345678901234', true],
             'NIK KTP 16 digit'    => ['6472032410880003', true],
             'NIP 18 digit'        => ['198810242014041001', false],
             'NPWP 15 digit'       => ['836972869722000', false],
@@ -235,7 +236,7 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
         // Logika yang sama dipakai di Login::getIdentitas() dan
         // Ticketing::getIdentitas(). Dulu keduanya berbeda (10 vs 16),
         // sehingga NIK 16 digit ditolak di portal publik.
-        $diterima = in_array(strlen($id), [10, 16], true) && ctype_digit($id);
+        $diterima = in_array(strlen($id), [10, 14, 16], true) && ctype_digit($id);
 
         $this->assertSame($diharapkan, $diterima, 'Identitas "' . $id . '" panjang ' . strlen($id));
     }
@@ -247,9 +248,9 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
 
             $this->assertNotFalse($isi, $jalur . ' harus terbaca.');
             $this->assertStringContainsString(
-                'in_array(strlen($id), [10, 16], true)',
+                'in_array(strlen($id), [10, 14, 16], true)',
                 $isi,
-                $jalur . ' harus menerima 10 digit (NIM lama) dan 16 digit (NIK KTP).',
+                $jalur . ' harus menerima 10 digit (NIM lama), 14 digit, dan 16 digit (NIK KTP).',
             );
         }
     }
@@ -264,7 +265,7 @@ final class PengaturanOperasionalTest extends CIUnitTestCase
             $this->assertNotFalse($isi);
 
             $posisiMhs     = strpos($isi, 'mhsId2(');
-            $posisiUmum    = strpos($isi, 'in_array(strlen($id), [10, 16], true)');
+            $posisiUmum    = strpos($isi, 'in_array(strlen($id), [10, 14, 16], true)');
 
             $this->assertNotFalse($posisiMhs, $jalur . ' harus memanggil mhsId2().');
             $this->assertNotFalse($posisiUmum, $jalur . ' harus punya fallback pemohon umum.');
